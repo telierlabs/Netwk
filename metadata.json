@@ -1,0 +1,9 @@
+{
+  "name": "Cylen AI",
+  "description": "A sophisticated AI assistant with a minimalist aesthetic, featuring web search and image editing capabilities.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
