@@ -1,0 +1,414 @@
+import React, { useState } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import {
+  Zap, Copy, ThumbsUp, ThumbsDown, RotateCcw, Share2,
+  Check, ExternalLink, MapPin, Navigation, Download,
+  Presentation, FileText, Maximize2, ChevronLeft, ChevronRight,
+  X, Pin, PinOff, Bookmark
+} from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import { AnimatePresence, motion } from 'motion/react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, AreaChart, Area, PieChart, Pie, Cell,
+} from 'recharts';
+import { cn } from '../../lib/utils';
+import { Message } from '../../types';
+
+interface ChatBubbleProps {
+  msg: Message;
+  msgIndex: number;
+  onResend?: (content: string) => void;
+  onEdit?: (content: string) => void;
+  onSuggest?: (text: string) => void;
+  onTogglePin?: (index: number) => void;
+  onSaveItem?: (item: any) => void;
+  suggestions?: string[];
+}
+
+const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981'];
+
+/* ── export helpers ── */
+function exportToPDFFromText(content: string, filename = 'cylen-export.pdf') {
+  const doc = new jsPDF();
+  const lines = doc.splitTextToSize(content.replace(/[#*`]/g, ''), 170);
+  doc.setFontSize(12);
+  doc.text(lines, 20, 20);
+  doc.save(filename);
+}
+
+function exportToDoc(content: string, filename = 'cylen-export.doc') {
+  const html = `<html><head><meta charset="utf-8"></head><body><pre style="font-family:Arial;font-size:12pt;white-space:pre-wrap">${content.replace(/</g, '<').replace(/>/g, '>')}</pre></body></html>`;
+  const blob = new Blob([html], { type: 'application/msword' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ── language display names ── */
+const LANG_LABELS: Record<string, string> = {
+  html: 'HTML', css: 'CSS', javascript: 'JavaScript', js: 'JavaScript',
+  typescript: 'TypeScript', ts: 'TypeScript', tsx: 'TSX', jsx: 'JSX',
+  python: 'Python', nodejs: 'Node.js', nextjs: 'Next.js',
+  json: 'JSON', bash: 'Bash', shell: 'Shell', sh: 'Shell',
+  sql: 'SQL', yaml: 'YAML', yml: 'YAML', xml: 'XML',
+  java: 'Java', kotlin: 'Kotlin', swift: 'Swift', go: 'Go',
+  rust: 'Rust', cpp: 'C++', c: 'C', csharp: 'C#', php: 'PHP',
+  ruby: 'Ruby', dart: 'Dart', tailwind: 'Tailwind', text: 'TEXT',
+};
+
+/* ─────────────── CODE BLOCK — CLEAN WHITE CARD ALA GROK ─────────────── */
+const CodeBlock = ({ lang, content }: { lang: string; content: string }) => {
+  const [copied, setCopied] = useState(false);
+  const label = LANG_LABELS[lang.toLowerCase()] || lang.toUpperCase();
+
+  const prismLang = lang === 'nodejs' ? 'javascript'
+    : lang === 'nextjs' ? 'jsx'
+    : lang === 'tailwind' ? 'css'
+    : lang || 'text';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="my-4 border border-[var(--bd)] rounded-2xl overflow-hidden bg-[var(--cd)] shadow-sm">
+      <div className="flex items-center justify-between px-4 py-2 bg-[var(--sf)] border-b border-[var(--bd)]">
+        <div className="flex items-center gap-2">
+          <span style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+            color: 'var(--mu)', textTransform: 'uppercase', fontFamily: 'monospace'
+          }}>{label}</span>
+        </div>
+        <button onClick={handleCopy}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all", 
+            copied ? "bg-green-100 text-green-700 border border-green-200" : "bg-[var(--bg)] border border-[var(--bd)] text-[var(--mu)] hover:text-[var(--text)]")}
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? 'Tersalin' : 'Salin'}
+        </button>
+      </div>
+
+      <SyntaxHighlighter
+        style={prism}
+        language={prismLang}
+        PreTag="div"
+        customStyle={{
+          margin: 0,
+          padding: '1.25rem',
+          fontSize: '13px',
+          lineHeight: '1.65',
+          background: 'transparent',
+          borderRadius: 0,
+        }}
+        codeTagProps={{
+          style: { fontFamily: "'JetBrains Mono', 'Fira Code', monospace" }
+        }}
+      >
+        {content}
+      </SyntaxHighlighter>
+    </div>
+  );
+};
+
+/* ─────────────── MAP CARD ─────────────── */
+const MapCard = ({ title, url }: { title: string; url: string }) => (
+  <div className="flex flex-col gap-0 bg-white border-2 border-black rounded-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all group my-4 max-w-md">
+    <div className="p-4 border-b-2 border-black flex items-center justify-between bg-white">
+      <div className="flex items-center gap-2">
+        <div className="p-2 bg-red-500 text-white rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"><MapPin size={16} /></div>
+        <span className="font-bold text-black text-sm truncate max-w-[200px]">{title}</span>
+      </div>
+      <a href={url} target="_blank" rel="noopener noreferrer" className="p-2 bg-black text-white rounded-lg hover:scale-110 active:scale-95 transition-all"><Navigation size={16} /></a>
+    </div>
+    <div className="w-full h-48 bg-slate-100">
+      <iframe width="100%" height="100%" frameBorder="0" style={{ border: 0 }} src={`https://maps.google.com/maps?q=${encodeURIComponent(title)}&t=&z=13&ie=UTF8&iwloc=&output=embed`} allowFullScreen />
+    </div>
+    <div className="p-3 bg-white border-t-2 border-black flex items-center justify-center">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold uppercase tracking-widest text-black hover:underline">Lihat Detail di Google Maps</a>
+    </div>
+  </div>
+);
+
+/* ─────────────── PRESENTATION ─────────────── */
+const PresentationRenderer = ({ content }: { content: string }) => {
+  const [currentSlide, setCurrentSlide] = useState(0);
+  let slides: any[] = [];
+  try { slides = JSON.parse(content).slides || []; } catch { return <div className="p-4 bg-red-50 text-red-600 rounded-xl border-2 border-red-200">Gagal memuat slide.</div>; }
+  const exportToPDF = () => {
+    const doc = new jsPDF('l', 'mm', 'a4');
+    slides.forEach((slide, i) => {
+      if (i > 0) doc.addPage();
+      doc.setFillColor(255, 255, 255); doc.rect(0, 0, 297, 210, 'F');
+      doc.setFontSize(24); doc.text(slide.title, 20, 30);
+      doc.setFontSize(14); doc.text(doc.splitTextToSize(slide.content, 250), 20, 50);
+    });
+    doc.save('presentation.pdf');
+  };
+  return (
+    <div className="my-6 border-2 border-black rounded-2xl overflow-hidden bg-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      <div className="bg-black text-white p-4 flex items-center justify-between">
+        <div className="flex items-center gap-2"><Presentation size={20} /><span className="font-bold uppercase tracking-widest text-xs">Cylen Slides</span></div>
+        <button onClick={exportToPDF} className="flex items-center gap-2 bg-white text-black px-3 py-1 rounded-lg text-xs font-bold hover:scale-105 transition-all"><Download size={14} /> PDF</button>
+      </div>
+      <div className="aspect-video p-12 flex flex-col justify-center bg-slate-50 relative min-h-[300px]">
+        <h2 className="text-3xl font-black mb-6">{slides[currentSlide]?.title}</h2>
+        <p className="text-lg leading-relaxed text-slate-600">{slides[currentSlide]?.content}</p>
+        <div className="absolute bottom-4 right-4 text-[10px] font-bold text-black/20">{currentSlide + 1} / {slides.length}</div>
+      </div>
+      <div className="p-4 border-t-2 border-black flex items-center justify-between bg-white">
+        <button disabled={currentSlide === 0} onClick={() => setCurrentSlide(s => s - 1)} className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-20"><ChevronLeft /></button>
+        <div className="flex gap-1">{slides.map((_: any, i: number) => <div key={i} className={cn("w-2 h-2 rounded-full", i === currentSlide ? "bg-black" : "bg-black/10")} />)}</div>
+        <button disabled={currentSlide === slides.length - 1} onClick={() => setCurrentSlide(s => s + 1)} className="p-2 hover:bg-slate-100 rounded-xl disabled:opacity-20"><ChevronRight /></button>
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────── DOCUMENT ─────────────── */
+const DocumentRenderer = ({ content }: { content: string }) => {
+  const exportPDF = () => { const doc = new jsPDF(); doc.text(doc.splitTextToSize(content, 170), 20, 20); doc.save('document.pdf'); };
+  return (
+    <div className="my-6 bg-white border border-[var(--bd)] rounded-2xl shadow-sm overflow-hidden">
+      <div className="p-4 border-b border-[var(--bd)] flex items-center justify-between bg-[var(--sf)]">
+        <div className="flex items-center gap-2 text-[var(--mu)]"><FileText size={18} /><span className="font-bold text-sm uppercase tracking-tight">Dokumen Cylen</span></div>
+        <button onClick={exportPDF} className="p-2 bg-[var(--bg)] border border-[var(--bd)] rounded-lg hover:opacity-80 transition-all"><Download size={16} /></button>
+      </div>
+      <div className="p-8 prose prose-sm max-w-none"><Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown></div>
+    </div>
+  );
+};
+
+/* ─────────────── IMAGE GALLERY ─────────────── */
+const ImageGallery = ({ src, square }: { src: string; square?: boolean }) => {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  return (
+    <>
+      <div className="relative overflow-hidden cursor-pointer border border-[var(--bd)] shadow-sm" style={square ? { width: 155, height: 155, borderRadius: 12 } : { width: 240, height: 240, borderRadius: 16 }} onClick={() => setIsFullscreen(true)}>
+        <img src={src} alt="" className="w-full h-full" style={{ objectFit: 'cover' }} />
+        <div className="absolute bottom-2 right-2 w-7 h-7 bg-black/40 rounded-lg flex items-center justify-center"><Maximize2 size={13} className="text-white" /></div>
+      </div>
+      <AnimatePresence>
+        {isFullscreen && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-black/95 flex flex-col items-center justify-center p-4">
+            <button onClick={() => setIsFullscreen(false)} className="absolute top-6 right-6 p-3 bg-white border-2 border-black rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"><X size={24} /></button>
+            <img src={src} alt="Fullscreen" className="max-w-full max-h-[80vh] object-contain border-4 border-white shadow-2xl" />
+            <div className="mt-8 flex gap-4">
+              <button onClick={() => { const a = document.createElement('a'); a.href = src; a.download = 'cylen-image.png'; a.click(); }} className="flex items-center gap-2 px-8 py-3 bg-white border-2 border-black rounded-2xl font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all"><Download size={20} /> Unduh</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+/* ─────────────── GRAPH ─────────────── */
+const GraphRenderer = ({ content }: { content: string }) => {
+  try {
+    const { type, data } = JSON.parse(content.trim());
+    return (
+      <div className="w-full h-64 my-4 bg-[var(--cd)] p-4 rounded-2xl border border-[var(--bd)] shadow-sm">
+        <ResponsiveContainer width="100%" height="100%">
+          {type === 'bar' ? (
+            <BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="var(--bd)" vertical={false} /><XAxis dataKey="name" stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><YAxis stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><Tooltip contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--bd)', borderRadius: '12px', fontSize: '12px' }} cursor={{ fill: 'var(--sf)' }} /><Bar dataKey="value" fill="var(--ac)" radius={[4, 4, 0, 0]} /></BarChart>
+          ) : type === 'line' ? (
+            <LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="var(--bd)" vertical={false} /><XAxis dataKey="name" stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><YAxis stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><Tooltip contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--bd)', borderRadius: '12px', fontSize: '12px' }} /><Line type="monotone" dataKey="value" stroke="var(--ac)" strokeWidth={3} dot={{ r: 4, fill: 'var(--ac)' }} activeDot={{ r: 6 }} /></LineChart>
+          ) : type === 'area' ? (
+            <AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="var(--bd)" vertical={false} /><XAxis dataKey="name" stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><YAxis stroke="var(--mu)" fontSize={10} tickLine={false} axisLine={false} /><Tooltip contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--bd)', borderRadius: '12px', fontSize: '12px' }} /><Area type="monotone" dataKey="value" stroke="var(--ac)" fill="var(--ac)" fillOpacity={0.2} strokeWidth={2} /></AreaChart>
+          ) : (
+            <PieChart><Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={60} label={{ fontSize: 10 }}>{data.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ backgroundColor: 'var(--bg)', borderColor: 'var(--bd)', borderRadius: '12px', fontSize: '12px' }} /></PieChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    );
+  } catch { return <div className="my-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-xs">Gagal merender grafik.</div>; }
+};
+
+/* ─────────────── HTML PREVIEW (ARTIFACTS / SIMULASI STYLE) ─────────────── */
+const HtmlPreview = ({ content }: { content: string }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!isExpanded) {
+    // TAMPILAN KARTU (SEBELUM DIKLIK)
+    return (
+      <div 
+        onClick={() => setIsExpanded(true)}
+        className="my-4 flex items-center gap-4 p-4 bg-[var(--cd)] border border-[var(--bd)] rounded-2xl cursor-pointer hover:bg-[var(--sf)] hover:border-[var(--mu)] transition-all shadow-sm group w-full max-w-sm"
+      >
+        <div className="w-12 h-12 rounded-xl bg-[var(--bg)] border border-[var(--bd)] flex items-center justify-center flex-shrink-0 text-[var(--mu)] group-hover:text-[var(--ac)] transition-colors">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="text-[15px] font-bold text-[var(--text)] truncate">Simulasi Visual HTML</h4>
+          <p className="text-[12px] text-[var(--mu)] truncate mt-0.5">Kode · HTML/CSS/JS (Klik untuk buka)</p>
+        </div>
+      </div>
+    );
+  }
+
+  // TAMPILAN VISUAL (SETELAH DIKLIK)
+  return (
+    <div className="my-4 border border-[var(--bd)] rounded-2xl overflow-hidden shadow-sm bg-[var(--bg)]">
+      <div className="flex items-center justify-between px-4 py-3 bg-[var(--sf)] border-b border-[var(--bd)]">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setIsExpanded(false)} className="p-1.5 hover:bg-[var(--bd)] rounded-lg transition-colors text-[var(--mu)] hover:text-[var(--text)]" title="Tutup Visual">
+            <X size={18} />
+          </button>
+          <span className="text-[12px] font-bold uppercase tracking-wider text-[var(--text)]">Live Preview</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1.5 mr-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+            <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
+          </div>
+        </div>
+      </div>
+      <div className="w-full bg-white relative" style={{ height: 450 }}>
+        <iframe 
+          srcDoc={content} 
+          title="Preview" 
+          className="w-full h-full border-none" 
+          sandbox="allow-scripts allow-same-origin allow-forms" 
+        />
+      </div>
+    </div>
+  );
+};
+
+/* ─────────────── COPY CARD ─────────────── */
+const CopyCard = ({ content }: { content: string }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="my-4 p-5 bg-[var(--cd)] border border-[var(--bd)] rounded-2xl relative shadow-sm hover:shadow-md transition-shadow">
+      <button onClick={() => { navigator.clipboard.writeText(content); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="absolute top-4 right-4 flex items-center gap-1.5 px-3 py-1.5 bg-[var(--sf)] border border-[var(--bd)] text-[var(--text)] rounded-xl text-[11px] font-bold hover:bg-[var(--bd)] transition-all">
+        {copied ? <Check size={13} className="text-green-500"/> : <Copy size={13} />}{copied ? 'Tersalin!' : 'Salin'}
+      </button>
+      <div className="text-[15px] leading-relaxed text-[var(--text)] pr-20 font-medium whitespace-pre-wrap">{content}</div>
+    </div>
+  );
+};
+
+/* ─────────────── MAIN BUBBLE ─────────────── */
+export const ChatBubble: React.FC<ChatBubbleProps> = ({
+  msg, msgIndex, onResend, onEdit, onSuggest, onTogglePin, onSaveItem, suggestions
+}) => {
+  const [copied, setCopied] = useState(false);
+  const [liked, setLiked] = useState<null | 'up' | 'down'>(null);
+  const [showUserSheet, setShowUserSheet] = useState(false);
+  const [userSheetCopied, setUserSheetCopied] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
+  const handleCopy = () => { navigator.clipboard.writeText(msg.content); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const handleUserSheetCopy = () => { navigator.clipboard.writeText(msg.content); setUserSheetCopied(true); setTimeout(() => { setUserSheetCopied(false); setShowUserSheet(false); }, 1500); };
+
+  const isUser = msg.role === 'user';
+
+  return (
+    <div id={`message-${msgIndex}`} className={cn("flex flex-col group w-full", isUser ? "items-end" : "items-start")}>
+
+      {/* ── meta row ── */}
+      <div className="flex items-center gap-2.5 mb-2">
+        {!isUser && (
+          <div className="w-7 h-7 flex items-center justify-center">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </div>
+        )}
+        <div className="flex flex-col">
+          {msg.senderName && <span className="text-[10px] font-bold text-[var(--text)] uppercase tracking-widest leading-none mb-1">{msg.senderName}</span>}
+          <span className="text-[10px] font-mono text-[var(--mu)] uppercase tracking-wider leading-none">{msg.timestamp}</span>
+        </div>
+        {msg.pinned && <Pin size={11} className="text-[var(--ac)] ml-1" />}
+      </div>
+
+      {/* ── images ── */}
+      {((msg.images && msg.images.length > 0) || msg.image) && (() => {
+        const imgs = (msg.images && msg.images.length > 0) ? msg.images : [msg.image!];
+        return (
+          <div className={cn("mb-2", isUser ? "flex justify-end" : "")}>
+            {imgs.length === 1 ? <ImageGallery src={imgs[0]} /> : (
+              <div className="grid gap-1" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 320 }}>
+                {imgs.map((src, i) => <div key={i} className="rounded-xl overflow-hidden"><ImageGallery src={src} square /></div>)}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── bubble ── */}
+      {msg.content && (
+        <div onClick={() => isUser && setShowUserSheet(true)}
+          className={cn("msg-bubble rounded-2xl w-full", isUser
+            ? "bg-[var(--sf)] border border-[var(--bd)] text-[var(--text)] rounded-tr-none max-w-[78%] px-4 py-3 text-[15px] leading-relaxed cursor-pointer"
+            : "bg-transparent text-[var(--text)] px-0 w-full"
+          )}>
+          {isUser ? (
+            <span style={{ wordBreak: 'break-word' }}>{msg.content}</span>
+          ) : (
+            <div className="cylen-md w-full">
+              <style>{`
+                .cylen-md { font-size:15px; line-height:1.7; color:var(--text); }
+                .cylen-md p { margin-bottom:0.75rem; }
+                .cylen-md code:not(pre code) { background:transparent; font-weight:600; font-family:'JetBrains Mono',monospace; font-size:0.9em; }
+                .cylen-md ul { list-style:disc; padding-left:1.4rem; margin-bottom:0.75rem; }
+                .cylen-md ol { list-style:decimal; padding-left:1.4rem; margin-bottom:0.75rem; }
+                .cylen-md strong { font-weight:700; }
+              `}</style>
+              <Markdown remarkPlugins={[remarkGfm]} components={{
+                code({ node, inline, className, children, ...props }: any) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  const lang = match ? match[1] : '';
+                  const raw = String(children).replace(/\n$/, '');
+                  if (inline) return <code className={className} {...props}>{children}</code>;
+                  if (lang === 'json-graph') return <GraphRenderer content={raw} />;
+                  if (lang === 'html-preview') return <HtmlPreview content={raw} />;
+                  if (lang === 'copy-card') return <CopyCard content={raw} />;
+                  if (lang === 'presentation-slides') return <PresentationRenderer content={raw} />;
+                  if (lang === 'document-content') return <DocumentRenderer content={raw} />;
+                  return <CodeBlock lang={lang || 'text'} content={raw} />;
+                },
+                table({ children }) { return <div className="overflow-x-auto my-4 border border-[var(--bd)] rounded-xl shadow-sm"><table className="w-full border-collapse text-left">{children}</table></div>; },
+                thead({ children }) { return <thead className="bg-[var(--sf)] border-b border-[var(--bd)]">{children}</thead>; },
+                th({ children }) { return <th className="px-4 py-3 font-bold text-[11px] uppercase tracking-wider text-[var(--mu)] whitespace-nowrap">{children}</th>; },
+                td({ children }) { return <td className="px-4 py-3 border-b border-[var(--bd)] text-[14px]">{children}</td>; },
+                p({ children }) { return <p className="mb-3 last:mb-0 leading-relaxed text-[15px]">{children}</p>; },
+                ul({ children }) { return <ul className="list-disc pl-5 mb-3 space-y-1">{children}</ul>; },
+                ol({ children }) { return <ol className="list-decimal pl-5 mb-3 space-y-1">{children}</ol>; },
+                li({ children }) { return <li className="text-[15px] leading-relaxed">{children}</li>; },
+                strong({ children }) { return <strong className="font-bold">{children}</strong>; },
+                a({ href, children }) { return <a href={href} target="_blank" rel="noopener noreferrer" className="text-[var(--ac)] underline underline-offset-2">{children}</a>; },
+              }}>{msg.content}</Markdown>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── AI action bar ── */}
+      {!isUser && (
+        <div className="flex items-center gap-[28px] mt-1 relative">
+          <button onClick={handleCopy} title="Salin" className={cn("transition-colors", copied ? "text-green-500" : "text-[var(--mu)] hover:text-[var(--text)]")}>
+            {copied ? <Check size={18} /> : <Copy size={18} />}
+          </button>
+          <button onClick={() => setLiked(l => l === 'up' ? null : 'up')} title="Suka" className={cn("transition-colors", liked === 'up' ? "text-blue-500" : "text-[var(--mu)] hover:text-[var(--text)]")}>
+            <ThumbsUp size={18} />
+          </button>
+          <button onClick={() => setLiked(l => l === 'down' ? null : 'down')} title="Tidak Suka" className={cn("transition-colors", liked === 'down' ? "text-red-400" : "text-[var(--mu)] hover:text-[var(--text)]")}>
+            <ThumbsDown size={18} />
+          </button>
+          <button onClick={() => onTogglePin?.(msgIndex)} title={msg.pinned ? "Lepas pin" : "Sematkan"} className={cn("transition-colors", msg.pinned ? "text-[var(--ac)]" : "text-[var(--mu)] hover:text-[var(--text)]")}>
+            {msg.pinned ? <PinOff size={18} /> : <Pin size={18} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
