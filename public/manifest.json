@@ -1,0 +1,16 @@
+{
+  "short_name": "Cylen AI",
+  "name": "Cylen AI - Asisten Cerdas",
+  "icons": [
+    {
+      "src": "/IMG_20260129_193319_637.webp",
+      "type": "image/webp",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0a0a0a",
+  "background_color": "#ffffff"
+}
