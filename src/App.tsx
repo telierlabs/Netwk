@@ -1,0 +1,137 @@
+import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { cn } from './lib/utils';
+import { useChat } from './hooks/useChat';
+import { useGroupChat } from './hooks/useGroupChat';
+import { useSaved } from './hooks/useSaved';
+import { useMemory } from './hooks/useMemory'; // 👇 Import hook memori baru
+import { Sidebar } from './components/layout/Sidebar';
+import { Header } from './components/layout/Header';
+import { ChatPage } from './pages/ChatPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { GroupChatPage } from './pages/GroupChatPage';
+import { GroupListPage } from './pages/GroupListPage';
+import { SavedPage } from './pages/SavedPage';
+import { SearchPage } from './pages/SearchPage';
+import { MemoryPage } from './pages/MemoryPage'; // 👇 Import halaman memori baru
+import { Theme, Font, View } from './types';
+import { FONTS } from './constants';
+
+export default function App() {
+  const [view, setView] = useState<View>('chat');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState<Theme>('t-light');
+  const [font, setFont] = useState<Font>('Modern');
+  const [inputText, setInputText] = useState('');
+  const [attachedImage, setAttachedImage] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const {
+    chatSessions, activeChatId, setActiveChatId,
+    messages, isSending, isSearching, searchQuery,
+    sendMessage, createNewChat,
+    togglePin, pinnedMessages,
+  } = useChat();
+
+  const { activeGroup, groupSessions, setActiveGroupId, isSending: isGroupSending, createGroup, addParticipant, sendGroupMessage } = useGroupChat();
+  const { savedItems, saveItem, deleteItem } = useSaved();
+  const { memoryItems, deleteMemory } = useMemory(); // 👇 Panggil mesin memori
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2200); };
+  const handleSendMessage = (images?: string[]) => { sendMessage(inputText, attachedImage, images); setInputText(''); setAttachedImage(null); };
+  const handleNewChat = () => { createNewChat(); setView('chat'); setIsSidebarOpen(false); showToast('Memulai chat baru'); };
+
+  const currentFontFamily = FONTS.find(f => f.id === font)?.family || 'Inter, sans-serif';
+
+  return (
+    <div
+      className={cn("app transition-colors duration-350", theme)}
+      style={{ fontFamily: currentFontFamily, height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+    >
+      <style>{`
+        .t-light { --bg:#fff; --sf:#f5f5f5; --bd:rgba(0,0,0,.08); --text:#0a0a0a; --mu:rgba(0,0,0,.38); --cd:#fff; --ac:#0a0a0a; --at:#fff; --ib:#f0f0f0; }
+        .t-dark { --bg:#0d0d0d; --sf:#1c1c1c; --bd:rgba(255,255,255,.07); --text:#f0f0f0; --mu:rgba(255,255,255,.35); --cd:#171717; --ac:#fff; --at:#0d0d0d; --ib:#252525; }
+        .t-cream { --bg:#f8f4ed; --sf:#ede8df; --bd:rgba(0,0,0,.07); --text:#2a1f0e; --mu:rgba(42,31,14,.42); --cd:#fff; --ac:#2a1f0e; --at:#f8f4ed; --ib:#e0d8c8; }
+        .t-dusk { --bg:#12101f; --sf:#1d1a2e; --bd:rgba(255,255,255,.06); --text:#ddd8f5; --mu:rgba(221,216,245,.38); --cd:#181526; --ac:#9d7fea; --at:#12101f; --ib:#252140; }
+        .t-forest { --bg:#f0f4ee; --sf:#e2ead8; --bd:rgba(0,0,0,.07); --text:#162216; --mu:rgba(22,34,22,.42); --cd:#fff; --ac:#162216; --at:#f0f4ee; --ib:#d4dece; }
+        .t-slate { --bg:#f0f2f5; --sf:#e4e8ee; --bd:rgba(0,0,0,.08); --text:#1a2132; --mu:rgba(26,33,50,.42); --cd:#fff; --ac:#1a2132; --at:#f0f2f5; --ib:#dde2ea; }
+        body { background-color:var(--bg); color:var(--text); }
+        .markdown-body h1 { font-size:1.25rem; font-weight:600; margin:1rem 0 0.5rem; }
+        .markdown-body h2 { font-size:1.1rem; font-weight:600; margin:0.8rem 0 0.4rem; }
+        .markdown-body p { margin-bottom:0.5rem; line-height:1.6; }
+        .markdown-body ul, .markdown-body ol { margin-left:1.5rem; margin-bottom:0.5rem; }
+        .markdown-body code { background:rgba(0,0,0,0.05); padding:0.2rem 0.4rem; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:0.85em; }
+        .t-dark .markdown-body code { background:rgba(255,255,255,0.1); }
+        .markdown-body pre { background:#1a1a1a; color:#f8f8f8; padding:1rem; border-radius:8px; overflow-x:auto; margin:1rem 0; }
+        .markdown-body pre code { background:transparent; padding:0; color:inherit; }
+      `}</style>
+
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        chatSessions={chatSessions}
+        activeChatId={activeChatId}
+        onSelectChat={(id) => { setActiveChatId(id); setView('chat'); setIsSidebarOpen(false); }}
+        onViewProfile={() => { setView('profile'); setIsSidebarOpen(false); }}
+        onViewGroup={() => { setView('group-list'); setIsSidebarOpen(false); }}
+        onViewSaved={() => { setView('saved'); setIsSidebarOpen(false); }}
+        onViewSearch={() => { setView('search'); setIsSidebarOpen(false); }}
+        // 👇 INI YANG BARU: Fungsi buat buka halamannya dari Sidebar
+        onViewMemory={() => { setView('memory'); setIsSidebarOpen(false); }} 
+      />
+
+      {view !== 'search' && (
+        <Header
+          view={view}
+          onMenuClick={() => setIsSidebarOpen(true)}
+          onBackClick={() => { if (view==='group-chat') setView('group-list'); else setView('chat'); }}
+          onNewChatClick={handleNewChat}
+        />
+      )}
+
+      <div style={{ flex:1, minHeight:0, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+
+        {view === 'chat' && (
+          <ChatPage
+            messages={messages} isSending={isSending} isSearching={isSearching}
+            searchQuery={searchQuery} inputText={inputText} setInputText={setInputText}
+            onSend={handleSendMessage} attachedImage={attachedImage} setAttachedImage={setAttachedImage}
+            onTogglePin={togglePin} pinnedMessages={pinnedMessages}
+            onSaveItem={(item) => { saveItem({ ...item, chatId: activeChatId }); showToast('Pesan berhasil disimpan!'); }} 
+          />
+        )}
+
+        {view === 'profile' && <ProfilePage theme={theme} setTheme={setTheme} font={font} setFont={setFont} showToast={showToast}/>}
+        {view === 'saved' && <SavedPage savedItems={savedItems} onDelete={deleteItem} onOpenChat={(chatId) => { setActiveChatId(chatId); setView('chat'); }} />}
+        
+        {/* 👇 INI YANG BARU: Nampilin halaman memori */}
+        {view === 'memory' && <MemoryPage memoryItems={memoryItems} onDelete={deleteMemory} />}
+
+        {view === 'search' && <SearchPage chatSessions={chatSessions} onBack={() => setView('chat')} onSelectChat={(chatId) => { setActiveChatId(chatId); setView('chat'); showToast('Membuka percakapan'); }} />}
+        
+        {view === 'group-list' && (
+          <GroupListPage
+            groups={groupSessions}
+            onSelectGroup={(id) => { setActiveGroupId(id); setView('group-chat'); }}
+            onCreateGroup={(title) => {
+              const id = createGroup(title);
+              if (id) { setActiveGroupId(id); setView('group-chat'); showToast('Grup berhasil dibuat'); }
+              else showToast('Maksimal 5 grup tercapai');
+            }}
+          />
+        )}
+        {view === 'group-chat' && activeGroup && <GroupChatPage activeGroup={activeGroup} isSending={isGroupSending} onSendMessage={sendGroupMessage} onAddParticipant={addParticipant} showToast={showToast}/>}
+      </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{opacity:0,y:20,x:'-50%'}} animate={{opacity:1,y:0,x:'-50%'}} exit={{opacity:0,y:20,x:'-50%'}}
+            className="fixed bottom-24 left-1/2 bg-[var(--ac)] text-[var(--at)] px-6 py-2.5 rounded-full text-sm font-medium shadow-2xl z-[100] whitespace-nowrap">
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
