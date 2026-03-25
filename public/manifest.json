@@ -1,0 +1,16 @@
+{
+  "short_name": "Cylen",
+  "name": "Cylen",
+  "icons": [
+    {
+      "src": "/IMG_20260110_200801_521.webp",
+      "type": "image/webp",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a"
+}
