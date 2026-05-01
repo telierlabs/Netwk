@@ -18,7 +18,7 @@ import { SearchPage } from './pages/SearchPage';
 import { MemoryPage } from './pages/MemoryPage';
 import { AiSettings } from './pages/AiSettings';
 import { TasksPage } from './pages/TasksPage';
-import { AppearancePage, UsagePage, IntegrationPage, SecurityPage, ExportDataPage } from './pages/NewPages';
+import { AppearancePage, UsagePage, IntegrationPage, SecurityPage, ExportDataPage } from './pages/NewPage';
 import { Theme, Font, View } from './types';
 import { FONTS } from './constants';
 
