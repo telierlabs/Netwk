@@ -1,0 +1,494 @@
+import React, { useRef, useState, useCallback, useEffect, useLayoutEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Mic, ChevronRight, X, Square, FileText, LayoutDashboard, Sparkles, Reply, Maximize2, ArrowLeft, Trash2 } from 'lucide-react';
+import { cn } from '../../lib/utils';
+import { LiveVoiceMode } from './LiveVoiceMode'; 
+import { Message } from '../../types';
+
+export type ChatMode = 'auto' | 'fast' | 'think';
+
+interface AttachedFile {
+  id: string;
+  url: string;
+  type: 'image' | 'video' | 'pdf' | 'text';
+  name: string;
+  mimeType?: string;
+}
+
+interface ChatInputProps {
+  inputText: string;
+  setInputText: (text: string) => void;
+  onSend: (images?: string[], pdfs?: { data: string; name: string }[]) => void;
+  isSending: boolean;
+  attachedImage: string | null;
+  setAttachedImage: (img: string | null) => void;
+  compact?: boolean;
+  mode?: ChatMode;
+  onModeChange?: (mode: ChatMode) => void;
+  onOpenCanvas?: () => void;
+  onCloseCanvas?: () => void;
+  isCanvasActive?: boolean; 
+  onUpgradeClick?: () => void;
+  replyingTo?: Message | null;
+  onCancelReply?: () => void;
+}
+
+const MAX_FILES = 5;
+const MAX_PASTE_LENGTH = 3000;
+
+const IconAuto = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15 3.5-3.5a2.2 2.2 0 0 0 0-3.1l-2.9-2.9a2.2 2.2 0 0 0-3.1 0L6 9"/><path d="M13 14l8-8"/><path d="M20 3v4"/><path d="M17 3h4"/></svg>);
+const IconSpark = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>);
+const IconThink = () => (<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.9 1.2 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>);
+const IconCheck = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" strokeWidth="1.5"/><path d="M8 12l3 3 5-5" strokeWidth="2.5"/></svg>);
+const IconPaperclip = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><g transform="rotate(-45 12 12)"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></g></svg>);
+const IconSpeakWave = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="10" x2="3" y2="14"></line><line x1="7.5" y1="6" x2="7.5" y2="18"></line><line x1="12" y1="2" x2="12" y2="22"></line><line x1="16.5" y1="6" x2="16.5" y2="18"></line><line x1="21" y1="10" x2="21" y2="14"></line></svg>);
+
+const MODES: { id: ChatMode; label: string; desc: string; Icon: React.FC }[] = [
+  { id: 'auto',  label: 'Auto',  desc: 'Pilih Spark atau Think otomatis', Icon: IconAuto  },
+  { id: 'fast',  label: 'Spark', desc: 'Respons cepat & ringan',           Icon: IconSpark },
+  { id: 'think', label: 'Think', desc: 'Analisis mendalam & teliti',       Icon: IconThink },
+];
+
+const ModeSelectorPopup: React.FC<{
+  current: ChatMode;
+  onSelect: (m: ChatMode) => void;
+  onClose: () => void;
+  onOpenCanvas?: () => void;
+  onCloseCanvas?: () => void;
+  isCanvasActive?: boolean;
+  onUpgradeClick?: () => void; 
+  above?: boolean; 
+}> = ({ current, onSelect, onClose, onOpenCanvas, onCloseCanvas, isCanvasActive, onUpgradeClick, above = true }) => (
+  <>
+    <div className="fixed inset-0 z-[110]" onClick={onClose} />
+    <div
+      className={cn("absolute z-[120] bg-[var(--bg)] rounded-[32px] p-2 flex flex-col left-4 outline-none [-webkit-tap-highlight-color:transparent]")}
+      style={{ 
+        width: 320, 
+        maxWidth: 'calc(100vw - 32px)', 
+        ...(above ? { bottom: 'calc(100% + 12px)' } : { top: 'calc(100% + 12px)' }), 
+        border: '1px solid var(--bd, transparent)', 
+        boxShadow: '0 16px 48px -12px rgba(0,0,0,0.3)' 
+      }}
+    >
+      <div className="px-5 pt-6 pb-5 mb-2 flex items-center justify-between border-b border-[var(--bd)] border-opacity-60 outline-none">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <img src="/IMG_20260427_105231.png" alt="Cylen Logo" className="w-10 h-10 object-contain" />
+            <span className="text-[22px] font-black text-[var(--text)] tracking-tight leading-none">Cylen</span>
+          </div>
+          <span className="text-[13px] text-[var(--mu)] font-medium mt-1">Akses intelijen premium</span>
+        </div>
+        <button onClick={() => { onClose(); if(onUpgradeClick) onUpgradeClick(); }} className="bg-[var(--text)] text-[var(--bg)] px-5 py-2.5 rounded-full text-[14px] font-bold shadow-md hover:scale-105 active:scale-95 transition-all tracking-wide flex-shrink-0 outline-none [-webkit-tap-highlight-color:transparent]">
+          Upgrade
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-1 pt-1 pb-1 outline-none">
+        {MODES.map((m) => {
+          const active = current === m.id && !isCanvasActive; 
+          return (
+            <button key={m.id} onClick={() => { onSelect(m.id); if (onCloseCanvas) onCloseCanvas(); onClose(); }} className="w-full flex items-start gap-4 px-5 py-3.5 rounded-[24px] transition-all text-left group outline-none [-webkit-tap-highlight-color:transparent]" style={{ background: active ? 'var(--sf)' : 'transparent' }}>
+              <div className="flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" style={{ color: active ? 'var(--text)' : 'var(--mu)', opacity: active ? 1 : 0.8 }}><m.Icon /></div>
+              <div className="flex-1 min-w-0"><div className="text-[16px] font-bold leading-tight mb-1" style={{ color: 'var(--text)' }}>{m.label}</div><div className="text-[13px] leading-tight" style={{ color: 'var(--mu)' }}>{m.desc}</div></div>
+              {active && <div className="flex-shrink-0 mt-0.5" style={{ color: 'var(--text)' }}><IconCheck /></div>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  </>
+);
+
+const ModeButton: React.FC<{ mode: ChatMode; onClick: () => void; size?: 'sm' | 'md'; isCanvasActive?: boolean; }> = ({ mode, onClick, size = 'md', isCanvasActive }) => {
+  const m = MODES.find(x => x.id === mode)!;
+  const iconSize = size === 'sm' ? 14 : 18;
+  const label = m?.label || 'Auto';
+  const Icon = m?.Icon || IconAuto;
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 rounded-full font-bold transition-all hover:opacity-80 active:scale-95 relative z-[105] outline-none [-webkit-tap-highlight-color:transparent]",
+        "bg-[var(--bd)] text-[var(--text)] border-[var(--bd)]"
+      )}
+      style={{ padding: size === 'sm' ? '6px 14px' : '8px 18px', fontSize: size === 'sm' ? 13 : 15, borderWidth: 1 }}
+    >
+      <span style={{ width: iconSize, height: iconSize, display: 'flex', alignItems: 'center', justifyItems: 'center' }}><Icon /></span>
+      <span>{label}</span><ChevronRight size={iconSize - 4} className="rotate-90 opacity-50" />
+    </button>
+  );
+};
+
+export const ChatInput: React.FC<ChatInputProps> = ({
+  inputText, setInputText, onSend, isSending, attachedImage, setAttachedImage,
+  compact = false, mode = 'auto', onModeChange, onOpenCanvas, onCloseCanvas, 
+  isCanvasActive = false, onUpgradeClick, replyingTo, onCancelReply
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [showModeSelector, setShowModeSelector] = useState(false);
+  const [showLiveVoice, setShowLiveVoice] = useState(false);
+  
+  const [showMaximize, setShowMaximize] = useState(false);
+  const [isFullscreenEditor, setIsFullscreenEditor] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = 'auto'; // Reset
+    const newHeight = Math.min(el.scrollHeight, 160);
+    el.style.height = `${newHeight}px`;
+
+    if (newHeight >= 150) {
+      setShowMaximize(true);
+    } else {
+      setShowMaximize(false);
+    }
+  }, [inputText]);
+
+  const startListening = useCallback(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert('Browser tidak mendukung voice input'); return; }
+    const rec = new SR();
+    rec.lang = 'id-ID'; rec.continuous = false; rec.interimResults = true;
+    rec.onstart = () => setIsListening(true);
+    rec.onresult = (e: any) => {
+      const t = Array.from(e.results).map((r: any) => r[0].transcript).join('');
+      setVoiceText(t);
+      if (e.results[e.results.length - 1].isFinal) { 
+        setInputText(t); 
+        setVoiceText(''); 
+        setIsListening(false);
+        rec.stop();
+        setTimeout(() => handleSend(), 50); 
+      }
+    };
+    rec.onend = () => { setIsListening(false); setVoiceText(''); };
+    rec.onerror = () => { setIsListening(false); setVoiceText(''); };
+    recognitionRef.current = rec;
+    rec.start();
+  }, [setInputText]);
+
+  const stopListening = useCallback(() => { 
+    recognitionRef.current?.stop(); 
+    setIsListening(false); 
+    setVoiceText(''); 
+  }, []);
+  
+  useEffect(() => () => recognitionRef.current?.stop(), []);
+
+  const processFiles = useCallback((files: File[]) => {
+    const remaining = MAX_FILES - attachedFiles.length;
+    const toAdd = files.slice(0, remaining);
+    Promise.all(toAdd.map(file => new Promise<AttachedFile>(resolve => {
+      const reader = new FileReader();
+      reader.onloadend = () => { 
+        const type = file.type === 'application/pdf' ? 'pdf' : file.type.startsWith('video') ? 'video' : file.type.startsWith('text') ? 'text' : 'image';
+        resolve({ id: `${Date.now()}-${Math.random()}`, url: reader.result as string, type, name: file.name, mimeType: file.type }); 
+      };
+      reader.readAsDataURL(file);
+    }))).then(newFiles => {
+      setAttachedFiles(prev => { const next = [...prev, ...newFiles].slice(0, MAX_FILES); setAttachedImage(next.find(f => f.type === 'image')?.url || null); return next; });
+    });
+  }, [attachedFiles.length, setAttachedImage]);
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { processFiles(Array.from(e.target.files || [])); e.target.value = ''; }, [processFiles]);
+  const removeFile = useCallback((id: string) => { setAttachedFiles(prev => { const next = prev.filter(f => f.id !== id); setAttachedImage(next.find(f => f.type === 'image')?.url || null); return next; }); }, [setAttachedImage]);
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData('text');
+    if (pastedText.length > MAX_PASTE_LENGTH) {
+      e.preventDefault(); 
+      const blob = new Blob([pastedText], { type: 'text/plain' });
+      const file = new File([blob], 'Kode_Panjang.txt', { type: 'text/plain' });
+      processFiles([file]);
+      setInputText(prev => prev + " [File kode dilampirkan]");
+    }
+  };
+
+  const handleSend = () => {
+    if (!inputText.trim() && attachedFiles.length === 0) return;
+    const imageUrls = attachedFiles.filter(f => f.type === 'image').map(f => f.url);
+    const pdfFiles = attachedFiles.filter(f => f.type === 'pdf' || f.type === 'text').map(f => ({ data: f.url.split(',')[1], name: f.name })); 
+    onSend(imageUrls.length > 0 ? imageUrls : undefined, pdfFiles.length > 0 ? pdfFiles : undefined);
+    setAttachedFiles([]); setAttachedImage(null);
+    setIsFullscreenEditor(false); 
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  };
+
+  const handleClearText = () => {
+      setInputText('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  };
+
+  const renderFullscreenEditor = () => (
+    <AnimatePresence>
+      {isFullscreenEditor && (
+        <motion.div 
+          initial={{ opacity: 0, y: '100%' }} 
+          animate={{ opacity: 1, y: 0 }} 
+          exit={{ opacity: 0, y: '100%' }}
+          transition={{ type: 'tween', ease: [0.32, 0.72, 0, 1], duration: 0.3 }}
+          className="fixed inset-0 z-[300] bg-[var(--bg)] flex flex-col pointer-events-auto"
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--bd)] bg-[var(--bg)] shadow-sm relative z-[310] outline-none">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsFullscreenEditor(false); }} 
+              className="p-2 -ml-2 text-[var(--text)]/60 hover:text-[var(--text)] transition-colors rounded-full active:scale-90 outline-none [-webkit-tap-highlight-color:transparent]"
+            >
+              <ArrowLeft size={24} strokeWidth={2.5} />
+            </button>
+            <span className="font-bold text-[16px] text-[var(--text)] tracking-tight outline-none">Edit Pesan</span>
+            <div className="flex items-center outline-none">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleClearText(); setIsFullscreenEditor(false); }} 
+                  className="p-2 text-red-500 hover:text-red-600 transition-colors rounded-full active:scale-90 mr-2 outline-none [-webkit-tap-highlight-color:transparent]"
+                >
+                  <Trash2 size={22} strokeWidth={2} />
+                </button>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); setIsFullscreenEditor(false); }} 
+                  className="p-2 -mr-2 text-[var(--text)]/60 hover:text-[var(--text)] transition-colors rounded-full active:scale-90 outline-none [-webkit-tap-highlight-color:transparent]"
+                >
+                  <X size={24} strokeWidth={2.5} />
+                </button>
+            </div>
+          </div>
+          
+          <div className="flex-1 p-5 overflow-hidden bg-[var(--bg)] relative z-[305] outline-none">
+            <textarea
+              autoFocus
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onPaste={handlePaste} 
+              // ✅ PROTEKSI ANTI FOUC (FLASH OF UNSTYLED CONTENT)
+              className="w-full h-full bg-transparent border-none outline-none resize-none text-[16px] leading-relaxed text-[var(--text)] placeholder:text-[var(--mu)] focus:ring-0 focus:outline-none focus:border-transparent [-webkit-tap-highlight-color:transparent]"
+              style={{ outline: 'none', border: 'none', boxShadow: 'none', WebkitAppearance: 'none' } as any}
+              placeholder="Tulis pesan atau tempel kode panjang di sini..."
+            />
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
+  const hasContent = inputText.trim() || attachedFiles.length > 0;
+  const isFull = attachedFiles.length >= MAX_FILES;
+
+  return (
+    <>
+      {renderFullscreenEditor()}
+      {showLiveVoice && <LiveVoiceMode onClose={() => setShowLiveVoice(false)} />}
+      
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center p-4 pointer-events-auto outline-none" onClick={() => setLightboxUrl(null)}>
+          <img src={lightboxUrl} alt="" className="max-w-full max-h-full object-contain rounded-xl outline-none" />
+          <button className="absolute top-5 right-5 w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white outline-none [-webkit-tap-highlight-color:transparent]" onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}><X size={20} /></button>
+        </div>
+      )}
+      
+      {showPicker && <div className="fixed inset-0 z-[90] pointer-events-auto outline-none" onClick={() => setShowPicker(false)} />}
+
+      <footer className={cn("px-2 pb-6 relative z-50 pointer-events-auto w-full outline-none", compact ? "pt-0" : "pt-2")}>
+        {showModeSelector && (
+          <ModeSelectorPopup
+            current={mode}
+            onSelect={m => onModeChange?.(m)}
+            onClose={() => setShowModeSelector(false)}
+            onOpenCanvas={onOpenCanvas}
+            onCloseCanvas={onCloseCanvas}
+            isCanvasActive={isCanvasActive}
+            onUpgradeClick={onUpgradeClick}
+          />
+        )}
+        
+        {showPicker && (
+          <div className="absolute bottom-full mb-3 left-4 bg-[var(--bg)] border border-[var(--bd)] rounded-[28px] p-2 flex flex-col gap-1 z-[100] outline-none [-webkit-tap-highlight-color:transparent]" style={{ width: 190, boxShadow: '0 12px 48px -12px rgba(0,0,0,0.25)' }}>
+            {[
+              { label: 'Kamera', ref: cameraInputRef, icon: <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg> },
+              { label: 'Galeri', ref: galleryInputRef, icon: <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path strokeLinecap="round" strokeLinejoin="round" d="M21 15l-5-5L5 21"/></svg> },
+              { label: 'File',   ref: fileInputRef,    icon: <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><path strokeLinecap="round" strokeLinejoin="round" d="M13 2v7h7"/></svg> },
+            ].map((item, i) => (
+              <button key={i} onClick={() => { setShowPicker(false); !isFull && item.ref.current?.click(); }} className="w-full flex items-center gap-4 px-4 py-3.5 rounded-[20px] hover:bg-[var(--sf)] transition-colors text-[var(--text)] text-left outline-none [-webkit-tap-highlight-color:transparent]">
+                <div className="flex-shrink-0 flex items-center justify-center opacity-80">{item.icon}</div>
+                <span className="text-[15px] font-semibold">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" onChange={handleFileChange} className="hidden outline-none" />
+        <input ref={galleryInputRef} type="file" accept="image/*,video/*" multiple onChange={handleFileChange} className="hidden outline-none" />
+        <input ref={fileInputRef} type="file" accept="*/*" multiple onChange={handleFileChange} className="hidden outline-none" />
+
+        <div className="max-w-4xl mx-auto w-full outline-none">
+          {isListening && !showLiveVoice ? (
+            <div className="flex items-center justify-between w-full h-[64px] rounded-[32px] px-2 relative overflow-hidden bg-[var(--sf)] shadow-sm transition-all duration-300 outline-none [-webkit-tap-highlight-color:transparent]">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[220px] h-[50px] bg-sky-400/30 blur-[20px] rounded-full animate-pulse" style={{ animationDuration: '1.5s' }} />
+              <button onClick={() => { setVoiceText(''); stopListening(); }} className="relative z-10 w-[46px] h-[46px] rounded-full flex items-center justify-center bg-[var(--bg)] text-[var(--text)] hover:scale-105 active:scale-95 transition-transform shadow-sm outline-none [-webkit-tap-highlight-color:transparent]">
+                <X size={20} strokeWidth={2.5} />
+              </button>
+              <div className="relative z-10 flex-1 flex justify-center items-center px-4 overflow-hidden outline-none">
+                {voiceText ? (
+                  <span className="text-[15px] font-medium text-[var(--text)] truncate outline-none">{voiceText}</span>
+                ) : (
+                  <div className="flex items-center text-[var(--mu)] text-[13px] font-medium outline-none">
+                    <ChevronRight size={16} className="rotate-180 mr-1 opacity-50" />
+                    Bicara sekarang...
+                  </div>
+                )}
+              </div>
+              <button onClick={() => { stopListening(); if (voiceText) { setInputText(voiceText); setTimeout(() => handleSend(), 50); } else if (inputText) { handleSend(); } }} className="relative z-10 w-[46px] h-[46px] rounded-full flex items-center justify-center bg-[#0a0a0a] text-[#fff] hover:scale-105 active:scale-95 transition-transform shadow-md outline-none [-webkit-tap-highlight-color:transparent]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              </button>
+            </div>
+          ) : (
+            <div className="relative w-full outline-none">
+              
+              {/* ✅ KUNCI PERBAIKAN: Outline diilangin paksa, border fallback ke transparan biar ga kedip item */}
+              <div
+                className="rounded-[32px] flex flex-col relative overflow-hidden transition-all duration-300 transform-gpu w-full focus:outline-none focus:ring-0"
+                style={{
+                  background: 'var(--sf, transparent)',
+                  border: '1px solid var(--bd, transparent)',
+                  boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+                  outline: 'none', 
+                  WebkitTapHighlightColor: 'transparent',
+                  WebkitAppearance: 'none'
+                }}
+              >
+                
+                <AnimatePresence>
+                  {replyingTo && (
+                    <motion.div 
+                      initial={{ opacity: 0, height: 0 }} 
+                      animate={{ opacity: 1, height: 'auto' }} 
+                      exit={{ opacity: 0, height: 0 }}
+                      className="px-4 pt-4 outline-none"
+                    >
+                      <div className="bg-[var(--bg)] rounded-[16px] border-l-[4px] border-[var(--ac)] p-3 pr-10 relative outline-none [-webkit-tap-highlight-color:transparent]">
+                        <button onClick={onCancelReply} className="absolute right-2 top-2 p-1.5 text-[var(--mu)] hover:text-[var(--text)] rounded-full transition-all active:scale-90 outline-none [-webkit-tap-highlight-color:transparent]">
+                           <X size={16} strokeWidth={2.5} />
+                        </button>
+                        <div className="flex items-center gap-1.5 mb-1 outline-none">
+                          <span className="text-[12px] font-bold text-[var(--ac)] tracking-wide uppercase outline-none">
+                            {replyingTo.role === 'user' ? 'Kamu' : 'Cylen AI'}
+                          </span>
+                        </div>
+                        <span className="text-[13.5px] text-[var(--text)]/80 line-clamp-2 font-medium leading-snug break-words outline-none">
+                          {replyingTo.content}
+                        </span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {attachedFiles.length > 0 && (
+                  <div className="px-4 pt-3 pb-1 relative z-[105] outline-none">
+                    <div className="flex gap-2 overflow-x-auto outline-none" style={{ scrollbarWidth: 'none' }}>
+                      {attachedFiles.map(file => (
+                        <div key={file.id} className="relative flex-shrink-0 rounded-[20px] overflow-hidden bg-[var(--bd)] outline-none [-webkit-tap-highlight-color:transparent]" style={{ width: 80, height: 80 }}>
+                          {file.type === 'pdf' || file.type === 'text' 
+                            ? <div className="w-full h-full flex flex-col items-center justify-center gap-1 bg-[var(--sf)] px-1 border border-[var(--bd)] outline-none"><FileText size={24} className={file.type === 'pdf' ? "text-red-500" : "text-blue-500"} /></div>
+                            : <img src={file.url} alt="" className="w-full h-full object-cover cursor-pointer outline-none" onClick={() => setLightboxUrl(file.url)} />
+                          }
+                          <button onClick={() => removeFile(file.id)} className="absolute top-2 right-2 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center hover:scale-110 transition-transform outline-none [-webkit-tap-highlight-color:transparent]"><X size={12} /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="px-5 pt-4 pb-1 relative z-[105] flex outline-none">
+                  {/* ✅ PROTEKSI FOUC DI TEXTAREA */}
+                  <textarea
+                    ref={textareaRef}
+                    value={inputText}
+                    onChange={e => setInputText(e.target.value)}
+                    onPaste={handlePaste} 
+                    placeholder="Tanya apa saja..."
+                    rows={1}
+                    className="w-full bg-transparent border-none outline-none resize-none text-[16px] leading-relaxed placeholder:text-[var(--mu)] text-[var(--text)] min-h-[28px] max-h-40 relative z-[105] py-1 pl-6 focus:ring-0 focus:outline-none focus:border-transparent" 
+                    style={{ fieldSizing: 'content', outline: 'none', border: 'none', boxShadow: 'none', WebkitAppearance: 'none' } as any}
+                  />
+                  
+                  <AnimatePresence>
+                     {inputText.length > 0 && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            onClick={handleClearText}
+                            className="absolute top-3 left-3 p-1.5 bg-[var(--text)]/5 hover:bg-[var(--text)]/10 text-[var(--text)]/60 hover:text-[var(--text)] rounded-full transition-colors z-[110]"
+                        >
+                            <Trash2 size={15} />
+                        </motion.button>
+                     )}
+                  </AnimatePresence>
+
+                  <AnimatePresence>
+                    {showMaximize && (
+                      <motion.button 
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        onClick={() => setIsFullscreenEditor(true)}
+                        className="absolute top-4 right-4 p-2 bg-[var(--bg)]/80 backdrop-blur-sm border border-[var(--bd)] rounded-full text-[var(--text)] shadow-sm hover:scale-105 active:scale-95 transition-all z-[110]"
+                      >
+                        <Maximize2 size={16} strokeWidth={2.5} />
+                      </motion.button>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="flex items-center justify-between px-2 pb-2 pt-1 relative outline-none">
+                  <div className="flex items-center gap-0.5 outline-none">
+                    <button
+                      onClick={() => !isFull && setShowPicker(p => !p)}
+                      className={cn(
+                        "p-2.5 rounded-full transition-all relative z-[105] outline-none [-webkit-tap-highlight-color:transparent]",
+                        showPicker ? "bg-[var(--bd)] text-[var(--text)]"
+                        : isFull ? "opacity-20 cursor-not-allowed text-[var(--text)]"
+                        : "text-[var(--text)] opacity-60 hover:opacity-100 hover:bg-[var(--bd)]"
+                      )}
+                    >
+                      <IconPaperclip />
+                    </button>
+                    <div className="ml-0.5 outline-none">
+                      <ModeButton mode={mode} onClick={() => setShowModeSelector(p => !p)} size="md" isCanvasActive={isCanvasActive} />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 relative z-[105] pl-2 outline-none">
+                    {!hasContent && (
+                      <button onClick={startListening} className="p-2.5 rounded-full text-[var(--mu)] hover:text-[var(--text)] hover:bg-[var(--bd)] transition-all flex-shrink-0 outline-none [-webkit-tap-highlight-color:transparent]">
+                        <Mic size={20} strokeWidth={2.5} />
+                      </button>
+                    )}
+
+                    {hasContent
+                      ? <button onClick={handleSend} disabled={isSending} className="w-10 h-10 rounded-full transition-all flex items-center justify-center bg-[var(--text)] text-[var(--bg)] scale-105 shadow-md hover:opacity-85 flex-shrink-0 outline-none [-webkit-tap-highlight-color:transparent]"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+                      : <button onClick={() => setShowLiveVoice(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--text)] text-[var(--bg)] font-bold transition-all hover:scale-105 shadow-md flex-shrink-0 ml-1 outline-none [-webkit-tap-highlight-color:transparent]"><IconSpeakWave /><span className="text-[13px]">Speak</span></button>
+                    }
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+        </div>
+      </footer>
+    </>
+  );
+};
