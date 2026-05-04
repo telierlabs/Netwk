@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content" />
+    <title>Cylen</title>
+    
+    <link rel="icon" type="image/jpeg" href="/Cylen.jpg" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#010101" />
+    
+    <link rel="apple-touch-icon" href="/Cylen.jpg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    
+    <meta name="description" content="Cylen adalah asisten AI futuristik yang membantu Anda mencari informasi, mengedit gambar, dan berdiskusi dengan cerdas. Cepat, aman, dan personal." />
+    <meta name="keywords" content="AI, asisten AI, Cylen, chatbot, edit gambar AI, pencarian web AI" />
+    <meta name="author" content="Cylen Team" />
+    
+    <style>
+      :root {
+        --bg: #fff; --sf: #f5f5f5; --bd: rgba(0,0,0,0.08); --text: #0a0a0a; --mu: rgba(0,0,0,0.38); --cd: #fff; --ac: #0a0a0a; --at: #fff; --ib: #f0f0f0;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #010101; --sf: #161616; --bd: rgba(255,255,255,0.07); --text: #f0f0f0; --mu: rgba(255,255,255,0.35); --cd: #111111; --ac: #fff; --at: #0d0d0d; --ib: #222222;
+        }
+      }
+
+      * { -webkit-tap-highlight-color: transparent !important; }
+      *:focus, *:focus-visible, *:active { outline: none !important; box-shadow: none !important; }
+      input, textarea, button, select { outline: none !important; -webkit-appearance: none !important; border-color: transparent; }
+      textarea { border: none !important; }
+      html, body, #root { outline: none !important; background-color: var(--bg); color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
