@@ -560,4 +560,4 @@ export const ChatBubble = memo(ChatBubbleComponent, (prev, next) => {
          prev.msg.pinned === next.msg.pinned &&
          prev.isLast === next.isLast &&
          prev.msg.role === next.msg.role;
-});! 
+});
