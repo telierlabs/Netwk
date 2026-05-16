@@ -1,0 +1,17 @@
+// Di bagian paling atas useChat.ts, tambah import ini:
+import { trackMessageSent } from '../pages/UsagePage';
+
+// ─────────────────────────────────────────────────────
+// Di dalam fungsi sendMessage(), setelah baris:
+//   setIsSending(true);
+//
+// Tambahkan 1 baris ini:
+//   trackMessageSent();
+// ─────────────────────────────────────────────────────
+
+// Contoh posisinya di useChat.ts:
+//
+//   updateChat(currentMessages, finalText);
+//   setIsSending(true);
+//   trackMessageSent();   // ← TAMBAH INI
+//   checkAndSetReminder(finalText, activeChatId);
