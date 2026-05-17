@@ -1,0 +1,23 @@
+{
+  "name": "Cylen AI",
+  "short_name": "Cylen",
+  "description": "Asisten AI Futuristik",
+  "start_url": "/",
+  "display": "fullscreen",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/Icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/Icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
