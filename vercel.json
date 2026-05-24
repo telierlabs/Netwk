@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    { 
+      "source": "/.well-known/assetlinks.json", 
+      "destination": "/.well-known/assetlinks.json" 
+    },
+    {
+      "source": "/__/auth/(.*)",
+      "destination": "https://cylen-cb78c.firebaseapp.com/__/auth/$1"
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": "/index.html" 
+    }
+  ]
+}
