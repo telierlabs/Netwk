@@ -1,0 +1,33 @@
+import { initializeApp, getApps, getApp } from "firebase/app";
+import { getAuth, browserLocalPersistence, setPersistence } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+
+const isConfigured = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "";
+
+let app: any = null;
+let auth: any = null;
+let db: any = null;
+
+if (isConfigured) {
+  try {
+    // Cegah inisialisasi duplikat (penting di Vercel/hot reload)
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    auth = getAuth(app);
+    db = getFirestore(app);
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
+  } catch (error) {
+    console.error("Firebase initialization failed:", error);
+  }
+}
+
+export { app, auth, db, isConfigured };
+export default app;
