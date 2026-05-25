@@ -1,0 +1,164 @@
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Zap, Sparkles, SlidersHorizontal, Save, RotateCcw, MessageSquareText } from 'lucide-react';
+import { cn } from '../lib/utils';
+import { useProfile } from '../hooks/useProfile';
+
+const TONES = ['Default', 'Profesional', 'Ramah', 'Jujur', 'Nyentrik', 'Efisien', 'Sinis'];
+
+export interface PersonalitySettings {
+  tone: string;
+  warmth: number;
+  formality: number;
+  enthusiasm: number;
+  length: number;
+  customPrompt: string;
+}
+
+// ── Helper: Bangun personality prompt dari settings ──
+export function buildPersonalityPrompt(settings: PersonalitySettings): string {
+  const parts: string[] = [];
+
+  const toneMap: Record<string, string> = {
+    'Default':      '',
+    'Profesional':  'Gunakan nada yang sangat profesional, terstruktur, dan presisi. Hindari bahasa informal.',
+    'Ramah':        'Gunakan nada yang sangat ramah, hangat, dan bersahabat seperti teman dekat.',
+    'Jujur':        'Selalu jujur dan lugas — sampaikan pendapat apa adanya tanpa basa-basi, tapi tetap sopan.',
+    'Nyentrik':     'Tambahkan sentuhan humor segar, analogi unik, dan gaya bahasa yang tidak biasa — tetap informatif.',
+    'Efisien':      'Jawab sesingkat dan sepadat mungkin. Tidak perlu basa-basi. Langsung ke inti.',
+    'Sinis':        'Gunakan nada sedikit sinis dan kritis, tapi tetap helpful dan tidak menyakiti.',
+  };
+  if (settings.tone !== 'Default' && toneMap[settings.tone]) parts.push(`**Nada Dasar:** ${toneMap[settings.tone]}`);
+
+  const warmthMap: Record<number, string> = {
+    1: 'Bersikap netral dan tidak terlalu hangat — lebih ke fakta dan efisiensi.', 2: '', 3: 'Tunjukkan empati yang dalam, gunakan kata-kata yang menyentuh dan peduli.',
+  };
+  if (warmthMap[settings.warmth]) parts.push(`**Kehangatan:** ${warmthMap[settings.warmth]}`);
+
+  const formalityMap: Record<number, string> = {
+    1: 'Gunakan bahasa gaul dan santai — boleh pakai singkatan, slang Indonesia yang relevan.', 2: '', 3: 'Gunakan bahasa Indonesia yang baku dan formal sesuai KBBI.',
+  };
+  if (formalityMap[settings.formality]) parts.push(`**Gaya Bahasa:** ${formalityMap[settings.formality]}`);
+
+  const enthusiasmMap: Record<number, string> = {
+    1: 'Respons dengan tenang dan datar — minim emoji, minim ekspresi berlebihan.', 2: '', 3: 'Tunjukkan antusiasme tinggi! Gunakan emoji secara ekspresif dan energik.',
+  };
+  if (enthusiasmMap[settings.enthusiasm]) parts.push(`**Antusiasme:** ${enthusiasmMap[settings.enthusiasm]}`);
+
+  const lengthMap: Record<number, string> = {
+    1: 'Selalu jawab sesingkat mungkin — maksimal 3-4 kalimat kecuali ada kebutuhan teknis.', 2: '', 3: 'Berikan jawaban yang sangat lengkap dan detail — jangan ragu untuk panjang.',
+  };
+  if (lengthMap[settings.length]) parts.push(`**Panjang Jawaban:** ${lengthMap[settings.length]}`);
+
+  if (settings.customPrompt.trim()) parts.push(`**Instruksi Tambahan dari User:** ${settings.customPrompt.trim()}`);
+
+  return parts.join('\n\n');
+}
+
+export const AiSettings = ({ onBack }: { onBack: () => void }) => {
+  const { profile, updateProfile } = useProfile();
+  
+  const [tone, setTone]             = useState('Default');
+  const [warmth, setWarmth]         = useState(2);
+  const [formality, setFormality]   = useState(2);
+  const [enthusiasm, setEnthusiasm] = useState(2);
+  const [length, setLength]         = useState(2);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [isSaved, setIsSaved]       = useState(false);
+
+  // Sync dari state Firestore ke form lokal
+  useEffect(() => {
+    if (profile.personality) {
+      setTone(profile.personality.tone);
+      setWarmth(profile.personality.warmth);
+      setFormality(profile.personality.formality);
+      setEnthusiasm(profile.personality.enthusiasm);
+      setLength(profile.personality.length);
+      setCustomPrompt(profile.personality.customPrompt);
+    }
+  }, [profile.personality]);
+
+  const handleReset = () => {
+    setTone('Default'); setWarmth(2); setFormality(2); setEnthusiasm(2); setLength(2); setCustomPrompt('');
+  };
+
+  const handleSave = async () => {
+    const settings: PersonalitySettings = { tone, warmth, formality, enthusiasm, length, customPrompt };
+
+    // 1. Simpan ke FIRESTORE
+    await updateProfile({ personality: settings });
+
+    // 2. Simpan temp prompt (ini cuma jembatan buat dibaca sama geminiService.ts)
+    const personalityPrompt = buildPersonalityPrompt(settings);
+    if (personalityPrompt.trim()) {
+      localStorage.setItem('cylen_temp_prompt', personalityPrompt);
+    } else {
+      localStorage.removeItem('cylen_temp_prompt');
+    }
+
+    setIsSaved(true);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const SegmentControl = ({ label, left, center, right, value, onChange }: any) => (
+    <div className="flex flex-col gap-3">
+      <span className="text-[13px] font-bold text-[var(--mu)] tracking-wide ml-1">{label}</span>
+      <div className="flex bg-[var(--bg)] p-1.5 rounded-[20px] border border-[var(--bd)] relative">
+        {[ { id: 1, text: left }, { id: 2, text: center }, { id: 3, text: right } ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onChange(item.id)}
+            className={cn(
+              "flex-1 py-2.5 text-[12px] rounded-[14px] transition-all duration-300 relative z-10",
+              value === item.id ? "bg-[var(--text)] text-[var(--bg)] font-bold shadow-md scale-[1.02]" : "text-[var(--mu)] font-medium hover:text-[var(--text)]"
+            )}
+          >
+            {item.text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[var(--bg)] flex flex-col absolute inset-0 z-50 animate-in slide-in-from-right-4 duration-300 overflow-hidden">
+      <header className="flex items-center px-4 py-4 gap-4 flex-shrink-0 bg-[var(--bg)] border-b border-[var(--bd)]">
+        <button onClick={onBack} className="p-2 -ml-2 rounded-xl text-[var(--text)] hover:bg-[var(--sf)] transition-colors"><ArrowLeft size={20} /></button>
+        <h1 className="font-bold text-[18px] text-[var(--text)] tracking-tight">Personalisasi Cylen</h1>
+      </header>
+
+      <div className="flex-1 overflow-y-auto pb-32" style={{ scrollbarWidth: 'none' }}>
+        <div className="p-4 flex flex-col gap-6 max-w-2xl mx-auto">
+          <div className="bg-[var(--sf)] p-5 rounded-[24px] border border-[var(--bd)]">
+            <div className="flex items-center gap-2 mb-4"><Sparkles size={18} className="text-[var(--text)]" /><span className="font-bold text-[14px] text-[var(--text)] uppercase tracking-widest">Nada Dasar</span></div>
+            <div className="flex flex-wrap gap-2.5">
+              {TONES.map((t) => (
+                <button key={t} onClick={() => setTone(t)} className={cn("px-4 py-2.5 rounded-full text-[13px] font-bold transition-all duration-300", tone === t ? "bg-[var(--text)] text-[var(--bg)] shadow-md scale-105" : "bg-[var(--bg)] text-[var(--text)] border border-[var(--bd)] hover:bg-[var(--bd)]")}>{t}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-[var(--sf)] p-5 rounded-[24px] border border-[var(--bd)] flex flex-col gap-6">
+            <div className="flex items-center gap-2 mb-1"><SlidersHorizontal size={18} className="text-[var(--text)]" /><span className="font-bold text-[14px] text-[var(--text)] uppercase tracking-widest">Karakteristik</span></div>
+            <SegmentControl label="Tingkat Kehangatan" left="Dingin" center="Normal" right="Empati" value={warmth} onChange={setWarmth} />
+            <SegmentControl label="Gaya Bahasa" left="Santai" center="Normal" right="Baku" value={formality} onChange={setFormality} />
+            <SegmentControl label="Antusiasme" left="Datar" center="Normal" right="Semangat" value={enthusiasm} onChange={setEnthusiasm} />
+            <SegmentControl label="Panjang Jawaban" left="Singkat" center="Normal" right="Detail" value={length} onChange={setLength} />
+          </div>
+
+          <div className="bg-[var(--sf)] p-5 rounded-[24px] border border-[var(--bd)] flex flex-col gap-4 mb-2">
+            <div className="flex items-center gap-2"><MessageSquareText size={18} className="text-[var(--text)]" /><span className="font-bold text-[14px] text-[var(--text)] uppercase tracking-widest">Instruksi Spesifik</span></div>
+            <p className="text-[12px] text-[var(--mu)] leading-relaxed -mt-1">Tulis instruksi khusus jika pilihan di atas belum cukup (contoh: "Selalu panggil aku Boss").</p>
+            <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="Masukkan instruksi tambahan di sini..." className="w-full bg-[var(--bg)] border border-[var(--bd)] rounded-[20px] px-5 py-4 text-[14px] text-[var(--text)] outline-none focus:border-[var(--text)] transition-all min-h-[120px] resize-none placeholder:text-[var(--mu)]" />
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-[var(--bg)] border-t border-[var(--bd)] flex items-center gap-3 shadow-[0_-10px_30px_rgba(0,0,0,0.05)]">
+        <button onClick={handleReset} className="flex items-center justify-center p-4 rounded-2xl bg-[var(--sf)] text-[var(--text)] border border-[var(--bd)] hover:bg-[var(--bd)] transition-all active:scale-90"><RotateCcw size={18} /></button>
+        <button onClick={handleSave} className={cn("flex-1 flex items-center justify-center gap-3 p-4 rounded-2xl font-bold text-[15px] transition-all active:scale-[0.98]", isSaved ? "bg-green-500 text-white shadow-lg shadow-green-500/20" : "bg-[var(--text)] text-[var(--bg)] shadow-lg hover:opacity-90")}>
+          {isSaved ? "Berhasil Disimpan! ✓" : <><Save size={18} /> Simpan Konfigurasi</>}
+        </button>
+      </div>
+    </div>
+  );
+};
