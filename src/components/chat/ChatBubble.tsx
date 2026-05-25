@@ -1,0 +1,206 @@
+// ─────────────────────────────────────────────
+// CHAT BUBBLE — src/components/chat/ChatBubble.tsx
+// ─────────────────────────────────────────────
+import React, { memo, useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Pin, FileText } from 'lucide-react';
+
+import type { ChatBubbleProps } from './types';
+import { parseFileLink } from './utils';
+
+import { LoadingDots }        from './components/ui/Primitives';
+import { UserBubble }         from './components/ui/UserBubble';
+import { ActionBar }          from './components/ui/ActionBar';
+import { SuggestionsRow }     from './components/ui/SuggestionsRow';
+import {
+  ActivityBubble,
+  AutoReminderBubble,
+  FileLinkElement,
+} from './components/ui/SpecialBubbles';
+import { SmartImageGallery }  from './components/media/SmartImageGallery';
+import { MarkdownRenderer, StreamingText } from './components/renderers/MarkdownRenderer';
+
+// ─────────────────────────────────────────────
+const ChatBubbleComponent: React.FC<ChatBubbleProps> = ({
+  msg, msgIndex, isLast, onResend, onEdit, onSuggest,
+  onTogglePin, onSaveItem, onRegenerate, onSwipeToReply,
+  suggestions, isStreaming = false, activityStatus = 'idle',
+}) => {
+  const isUser = msg.role === 'user';
+
+  const [actionsUnlocked, setActionsUnlocked] = useState(!isStreaming);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const handleComplete = useCallback(() => {
+    setActionsUnlocked(true);
+  }, []);
+
+  useEffect(() => {
+    if (isStreaming) {
+      setActionsUnlocked(false);
+    }
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming) setActionsUnlocked(true);
+  }, [msg.content]);
+
+  if (!isUser && isLast && activityStatus !== 'idle')
+    return <ActivityBubble msgIndex={msgIndex} activityStatus={activityStatus} />;
+
+  if (!isUser && msg.isAutoReminder)
+    return <AutoReminderBubble msg={msg} msgIndex={msgIndex} />;
+
+  const { fileLinkData, rest: displayContent } = parseFileLink(msg.content || '');
+
+  if (!isUser && isStreaming && (!displayContent || displayContent.trim() === '')) {
+    return (
+      <div id={`message-${msgIndex}`} style={{ display: 'flex', alignItems: 'flex-start', width: '100%', margin: '4px 0' }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center',
+          padding: '12px 18px',
+          background: 'var(--sf,#f7f5f1)',
+          border: '1.5px solid var(--bd,#e0ddd7)',
+          borderRadius: '6px 16px 16px 16px',
+        }}>
+          <LoadingDots />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      id={`message-${msgIndex}`}
+      style={{
+        display: 'flex', flexDirection: 'column', width: '100%',
+        alignItems: isUser ? 'flex-end' : 'flex-start',
+        position: 'relative',
+        zIndex: isMenuOpen ? 50 : 10,
+        gap: 4,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+        {msg.senderName && (
+          <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text,#141414)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            {msg.senderName}
+          </span>
+        )}
+        <span style={{ fontSize: 9.5, fontFamily: 'monospace', color: 'var(--mu,#909090)', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.6 }}>
+          {msg.timestamp}
+        </span>
+        {msg.pinned && <Pin size={10} color="var(--mu,#909090)" style={{ opacity: 0.7 }} />}
+      </div>
+
+      {fileLinkData && (
+        <FileLinkElement
+          type={fileLinkData.type}
+          fileName={fileLinkData.fileName}
+          fileUrl={fileLinkData.fileUrl}
+          isUser={isUser}
+        />
+      )}
+
+      {((msg.images && msg.images.length > 0) || msg.image) && (
+        <SmartImageGallery
+          images={msg.images?.length ? msg.images : [msg.image!]}
+          isUser={isUser}
+        />
+      )}
+
+      {msg.pdfs && msg.pdfs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8, width: '100%', alignItems: isUser ? 'flex-end' : 'flex-start' }}>
+          {msg.pdfs.map((pdf, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', background: 'var(--sf,#f7f5f1)', border: '1.5px solid var(--bd,#e0ddd7)', borderRadius: 14, maxWidth: '85%' }}>
+              <FileText size={17} color="var(--mu,#909090)" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text,#141414)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>
+                {pdf.name || 'Dokumen Terlampir'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {displayContent && (
+        isUser ? (
+          <UserBubble
+            msg={msg}
+            displayContent={displayContent}
+            onResend={onResend}
+            onEdit={onEdit}
+            onSwipeToReply={onSwipeToReply}
+            isMenuOpen={isMenuOpen}
+            setIsMenuOpen={setIsMenuOpen}
+          />
+        ) : (
+          <motion.div
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.1}
+            onDragEnd={(_e: any, info: any) => { if (info.offset.x > 55) onSwipeToReply?.(msg); }}
+            style={{ width: '100%' }}
+          >
+            {isStreaming
+              ? (
+                <StreamingText
+                  content={displayContent}
+                  isStreaming={isStreaming}
+                  onComplete={handleComplete}
+                />
+              ) : (
+                <MarkdownRenderer content={displayContent} />
+              )
+            }
+          </motion.div>
+        )
+      )}
+
+      {!isUser && (
+        <AnimatePresence>
+          {actionsUnlocked && (
+            <motion.div
+              key="actions"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+            >
+              <ActionBar
+                content={msg.content}
+                msgIndex={msgIndex}
+                isPinned={!!msg.pinned}
+                onTogglePin={onTogglePin}
+                onRegenerate={onRegenerate}
+                onSaveItem={() => {
+                  // MENGGUNAKAN FUNGSI YANG DIPASS DENGAN BENAR
+                  if(onSaveItem) onSaveItem(msg.content);
+                }} 
+                visible={true}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+
+      {!isUser && isLast && suggestions && suggestions.length > 0 && (
+        <AnimatePresence>
+          {actionsUnlocked && (
+            <motion.div
+              key="suggestions"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.28, ease: 'easeOut', delay: 0.06 }}
+              style={{ width: '100%' }}
+            >
+              <SuggestionsRow suggestions={suggestions} onSuggest={onSuggest} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+    </div>
+  );
+};
+
+// ── PERBAIKAN FATAL: HAPUS CUSTOM COMPARISON REACT MEMO YANG BIKIN PROP "BASI" ──
+export const ChatBubble = memo(ChatBubbleComponent);
