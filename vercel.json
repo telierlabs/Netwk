@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    { 
+      "source": "/.well-known/assetlinks.json", 
+      "destination": "/.well-known/assetlinks.json" 
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/sitemap.xml"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    { 
+      "source": "/((?!favicon\\.ico|manifest\\.json|android-chrome-192x192\\.png|android-chrome-512x512\\.png|sw\\.js|robots\\.txt).*)", 
+      "destination": "/index.html" 
+    }
+  ]
+}
