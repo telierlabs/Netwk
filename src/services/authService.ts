@@ -1,37 +1,38 @@
-import { 
+import {
   signInWithPopup,
-  getRedirectResult,
-  GoogleAuthProvider, 
-  signOut, 
+  GoogleAuthProvider,
+  signOut,
   onAuthStateChanged,
+  signInWithCredential,
   User
 } from "firebase/auth";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
+import { Capacitor } from "@capacitor/core";
 import { auth } from "../lib/firebase";
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// isMobile dan signInWithRedirect DIHAPUS TOTAL
+const isNative = Capacitor.isNativePlatform();
 
 export const signInWithGoogle = async () => {
   if (!auth) throw new Error("Firebase Auth tidak terkonfigurasi.");
-  
-  // Langsung tembak pakai Popup aja, nggak peduli HP atau PC
-  await signInWithPopup(auth, googleProvider);
-};
 
-export const handleRedirectResult = async () => {
-  if (!auth) return null;
-  try {
-    const result = await getRedirectResult(auth);
-    return result;
-  } catch (error: any) {
-    console.error("Redirect result error:", error);
-    return null;
+  if (isNative) {
+    const result = await FirebaseAuthentication.signInWithGoogle();
+    const idToken = result.credential?.idToken;
+    if (!idToken) throw new Error("Gagal mendapatkan token dari Google.");
+    const credential = GoogleAuthProvider.credential(idToken);
+    await signInWithCredential(auth, credential);
+  } else {
+    await signInWithPopup(auth, googleProvider);
   }
 };
 
 export const logout = async () => {
+  if (isNative) {
+    await FirebaseAuthentication.signOut();
+  }
   if (!auth) return;
   await signOut(auth);
 };
