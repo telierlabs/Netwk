@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "669074921410-2kgcth3bgc72g8milcoaug44suofcnup.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.telierlabs.cylen",
+            "certificate_hash": "0df4880a7ca759d0684e5dcf635dcfd2745dab59"
+          }
+        },
+        {
           "client_id": "669074921410-dmq5a5qv6nrsh0nocfno7o7kp1ahn2rf.apps.googleusercontent.com",
           "client_type": 3
         }
