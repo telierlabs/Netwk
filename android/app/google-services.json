@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "669074921410-uc69cipp8gng628549l9hvt69r4rml4p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.telierlabs.cylen",
+            "certificate_hash": "05d4cea7fe195ecbadc2ecd4fe9c20750d0e0fe9"
+          }
+        },
+        {
           "client_id": "669074921410-dmq5a5qv6nrsh0nocfno7o7kp1ahn2rf.apps.googleusercontent.com",
           "client_type": 3
         }
