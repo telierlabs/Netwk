@@ -20,5 +20,8 @@ workflows:
         script: |
           cd android
           ./gradlew clean assembleDebug
+      - name: Print SHA1 fingerprint
+        script: |
+          keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep "SHA1:"
     artifacts:
       - android/app/build/outputs/**/*.apk
