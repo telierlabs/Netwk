@@ -20,7 +20,7 @@ export const signInWithGoogle = async () => {
 
   try {
     if (isNative) {
-      const result = await FirebaseAuthentication.signInWithGoogle();
+      const result = await FirebaseAuthentication.signInWithGoogle({ useCredentialManager: false });
       const idToken = result.credential?.idToken;
       if (!idToken) throw new Error("Gagal mendapatkan token.");
       const credential = GoogleAuthProvider.credential(idToken);
