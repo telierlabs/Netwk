@@ -1,0 +1,15 @@
+  scripts:
+    - name: Install dependencies
+      script: |
+        rm -rf node_modules
+        npm install
+    - name: Create dummy dist folder
+      script: mkdir -p dist && echo '<html></html>' > dist/index.html
+    - name: Sync Capacitor
+      script: |
+        rm -rf android/app/build
+        npx cap sync android
+    - name: Build APK
+      script: |
+        cd android
+        ./gradlew clean assembleDebug
