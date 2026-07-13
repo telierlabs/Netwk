@@ -23,7 +23,7 @@ export default function AppNative() {
     try {
       await signInWithGoogle();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Gagal login. Coba lagi.');
+      setErrorMsg(err?.message || err?.code || JSON.stringify(err) || 'Gagal login. Coba lagi.');
     } finally {
       setIsLoggingIn(false);
     }
