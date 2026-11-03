@@ -1,0 +1,14 @@
+/* src/features/landing/landing-theme.css
+   Mode terang = seluruh halaman landing di-invert (hitam -> putih).
+   Atribut data-landing-filter dipasang di <html> oleh landingTheme.tsx
+   dan otomatis dicabut saat user sudah login (masuk ke aplikasi chat). */
+
+html[data-landing-filter="1"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Foto/gambar besar di-invert balik supaya warna aslinya nggak rusak */
+html[data-landing-filter="1"] [style*="url("],
+html[data-landing-filter="1"] img[style*="100%"] {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
