@@ -1,0 +1,143 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, Bell, MapPin, Mic, Camera, Check } from 'lucide-react';
+import { useT } from '../lib/i18n';
+
+interface Props {
+  onBack: () => void;
+  showToast: (msg: string) => void;
+}
+
+type Key = 'notifications' | 'geolocation' | 'microphone' | 'camera';
+type Status = 'granted' | 'denied' | 'prompt';
+
+const TEXT: Record<string, Record<string, string>> = {
+  id: {
+    title: 'Notifikasi & Izin', allow: 'Izinkan', blocked: 'Diblokir',
+    blockedHint: 'Izin diblokir. Buka pengaturan situs di browser untuk mengaktifkan.',
+    failed: 'Izin tidak diberikan',
+    notifications: 'Notifikasi', notificationsDesc: 'Kabar tugas & pengingat',
+    geolocation: 'Lokasi', geolocationDesc: 'Hasil yang relevan di sekitarmu',
+    microphone: 'Mikrofon', microphoneDesc: 'Input suara',
+    camera: 'Kamera', cameraDesc: 'Ambil foto untuk dikirim ke chat',
+  },
+  en: {
+    title: 'Notifications & Permissions', allow: 'Allow', blocked: 'Blocked',
+    blockedHint: 'Permission is blocked. Enable it in your browser’s site settings.',
+    failed: 'Permission not granted',
+    notifications: 'Notifications', notificationsDesc: 'Task updates & reminders',
+    geolocation: 'Location', geolocationDesc: 'Relevant results near you',
+    microphone: 'Microphone', microphoneDesc: 'Voice input',
+    camera: 'Camera', cameraDesc: 'Take photos to send in chat',
+  },
+};
+
+const ITEMS: { key: Key; icon: React.ReactNode }[] = [
+  { key: 'notifications', icon: <Bell size={24} /> },
+  { key: 'geolocation', icon: <MapPin size={24} /> },
+  { key: 'microphone', icon: <Mic size={24} /> },
+  { key: 'camera', icon: <Camera size={24} /> },
+];
+
+const getStatus = async (key: Key): Promise<Status> => {
+  try {
+    if (key === 'notifications' && 'Notification' in window) {
+      const p = Notification.permission;
+      return p === 'default' ? 'prompt' : p;
+    }
+    const res = await navigator.permissions.query({ name: key as PermissionName });
+    return res.state as Status;
+  } catch {
+    return 'prompt';
+  }
+};
+
+const requestPermission = async (key: Key): Promise<void> => {
+  if (key === 'notifications') {
+    await Notification.requestPermission();
+  } else if (key === 'geolocation') {
+    await new Promise<void>((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(() => resolve(), reject, { timeout: 10000 })
+    );
+  } else {
+    const stream = await navigator.mediaDevices.getUserMedia(
+      key === 'microphone' ? { audio: true } : { video: true }
+    );
+    stream.getTracks().forEach((t) => t.stop());
+  }
+};
+
+export const PermissionsPage: React.FC<Props> = ({ onBack, showToast }) => {
+  const { lang } = useT();
+  const tx = TEXT[lang] || TEXT.id;
+  const [status, setStatus] = useState<Record<Key, Status>>({
+    notifications: 'prompt', geolocation: 'prompt', microphone: 'prompt', camera: 'prompt',
+  });
+
+  const refresh = useCallback(async () => {
+    const entries = await Promise.all(ITEMS.map(async (i) => [i.key, await getStatus(i.key)] as const));
+    setStatus(Object.fromEntries(entries) as Record<Key, Status>);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refresh]);
+
+  const handleAllow = async (key: Key) => {
+    if (status[key] === 'denied') { showToast(tx.blockedHint); return; }
+    try { await requestPermission(key); } catch { showToast(tx.failed); }
+    refresh();
+  };
+
+  const radius = (i: number, n: number) =>
+    i === 0 ? 'rounded-t-[28px] rounded-b-[6px]'
+    : i === n - 1 ? 'rounded-t-[6px] rounded-b-[28px]'
+    : 'rounded-[6px]';
+
+  return (
+    <div className="flex-1 min-h-0 flex flex-col bg-[var(--bg)] relative z-50">
+      <header
+        className="flex items-center gap-3 px-4 pb-3 flex-shrink-0"
+        style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 0px))' }}
+      >
+        <button onClick={onBack} aria-label="Back" className="w-11 h-11 -ml-1 rounded-full flex items-center justify-center text-[var(--text)] active:bg-[var(--text)]/10">
+          <ArrowLeft size={24} />
+        </button>
+        <h1 className="text-[22px] font-semibold tracking-tight text-[var(--text)]">{tx.title}</h1>
+      </header>
+
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: 'none', overscrollBehavior: 'contain' }}>
+        <div className="max-w-2xl mx-auto pt-2 pb-10 mx-3">
+          <div className="mx-3 flex flex-col gap-[2px]">
+            {ITEMS.map((it, i) => {
+              const s = status[it.key];
+              return (
+                <div key={it.key} className={`flex items-center gap-4 bg-[var(--text)]/5 px-5 py-4 text-[var(--text)] ${radius(i, ITEMS.length)}`}>
+                  <div className="w-6 flex justify-center flex-shrink-0 opacity-90">{it.icon}</div>
+                  <div className="flex-1 min-w-0 flex flex-col">
+                    <span className="text-[18px] font-medium leading-tight truncate">{tx[it.key]}</span>
+                    <span className="text-[15px] text-[var(--mu)] mt-0.5 truncate">{tx[it.key + 'Desc']}</span>
+                  </div>
+                  {s === 'granted' ? (
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                      <Check size={18} className="text-green-500" />
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleAllow(it.key)}
+                      className={`flex-shrink-0 px-4 py-2 rounded-full text-[15px] font-semibold active:scale-95 transition-transform ${s === 'denied' ? 'bg-[var(--text)]/10 text-[var(--mu)]' : 'bg-blue-600 text-white'}`}
+                    >
+                      {s === 'denied' ? tx.blocked : tx.allow}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
