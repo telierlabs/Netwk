@@ -1,0 +1,313 @@
+import React, { useMemo, useState } from 'react';
+import { ArrowLeft, X, Plus, Folder, FolderMinus, MessageSquare, SquarePen, Pencil, Trash2 } from 'lucide-react';
+import { cn } from '../lib/utils';
+import { ChatSession } from '../types';
+import type { Project } from '../hooks/useProjects';
+
+// ─────────────────────────────────────────────────────────────
+// PROJECT (gaya Grok, tanpa file): daftar project → buat project (nama + instruksi) → isi project.
+// - Buat project di sini (tombol + atau "Project baru").
+// - Masukkan chat ke project: sidebar → titik tiga di riwayat chat → Move to Project → pilih project.
+// - Instruksi project otomatis dikirim ke AI di setiap chat yang ada di dalam project (diatur di useChat).
+// ─────────────────────────────────────────────────────────────
+
+interface ProjectPageProps {
+  projects: Project[];
+  chatSessions: ChatSession[];
+  onCreateProject: (name: string, instructions: string) => unknown;
+  onUpdateProject: (id: string, patch: { name: string; instructions: string }) => unknown;
+  onDeleteProject: (id: string) => unknown;
+  onOpenChat: (chatId: string) => void;
+  onRemoveFromProject: (chatId: string) => void;
+  onNewChatInProject: (projectId: string) => void;
+  onBack: () => void;
+}
+
+interface ProjectChat {
+  id: string;
+  title: string;
+  lastRaw: unknown;
+  date: string;
+  count: number;
+}
+
+type Screen =
+  | { name: 'list' }
+  | { name: 'form'; editId?: string }
+  | { name: 'detail'; id: string };
+
+const sessionTitle = (s: any): string => {
+  if (s.title && !['New Chat', 'Chat Baru', 'New Conversation'].includes(s.title)) return s.title;
+  const first = s.messages?.find((m: any) => m.role === 'user')?.content;
+  return first ? first.split(' ').slice(0, 4).join(' ') : 'Chat Baru';
+};
+
+// Pratinjau dari balasan terakhir. File hasil generate (data URL panjang) dan blok kode dibersihkan dulu
+// supaya yang tampil teks yang enak dibaca, bukan potongan base64.
+const makePreview = (raw: unknown): string => {
+  if (typeof raw !== 'string' || !raw) return '';
+  return raw
+    .replace(/\[(?:PDF|DOCS|EXCEL|PPT|EBOOK)_FILE:\s*"([^"]+)"\]\(data:[^)]*\)/g, 'File: $1')
+    .replace(/```[\s\S]*?```/g, ' [kode] ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+};
+
+const IconBtn = "w-10 h-10 rounded-full flex items-center justify-center text-[var(--text)] hover:bg-[var(--text)]/10 active:scale-90 transition-all";
+const ActionBtn = "flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--text)]/5 hover:bg-[var(--text)]/10 text-[13px] font-semibold text-[var(--text)] transition-all active:scale-95";
+
+const TopBar: React.FC<{ left: React.ReactNode; title: string; right?: React.ReactNode }> = ({ left, title, right }) => (
+  <div className="px-3 pt-5 pb-3 grid grid-cols-[40px_1fr_40px] items-center gap-2 flex-shrink-0">
+    <div>{left}</div>
+    <h1 className="text-[18px] font-bold tracking-tight text-[var(--text)] text-center truncate">{title}</h1>
+    <div className="flex justify-end">{right}</div>
+  </div>
+);
+
+// ── FORM BUAT / EDIT PROJECT ──
+const ProjectForm: React.FC<{
+  heading: string;
+  submitLabel: string;
+  initialName?: string;
+  initialInstructions?: string;
+  onClose: () => void;
+  onSubmit: (name: string, instructions: string) => void;
+}> = ({ heading, submitLabel, initialName = '', initialInstructions = '', onClose, onSubmit }) => {
+  const [name, setName] = useState(initialName);
+  const [instructions, setInstructions] = useState(initialInstructions);
+  const canSubmit = name.trim().length > 0;
+  const submit = () => { if (canSubmit) onSubmit(name.trim(), instructions.trim()); };
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg)]">
+      <div className="px-3 pt-5 pb-3 flex items-center gap-2 flex-shrink-0">
+        <button onClick={onClose} aria-label="Tutup" className={IconBtn}>
+          <X size={24} strokeWidth={2.2} />
+        </button>
+        <h1 className="flex-1 text-[20px] font-bold tracking-tight text-[var(--text)]">{heading}</h1>
+        <button
+          onClick={submit}
+          disabled={!canSubmit}
+          className={cn(
+            "h-11 px-6 rounded-full text-[16px] font-semibold transition-all active:scale-95",
+            canSubmit ? "bg-[var(--ac)] text-[var(--at)]" : "bg-[var(--text)]/5 text-[var(--text)]/40"
+          )}
+        >
+          {submitLabel}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-10 min-h-0" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-[var(--text)]/5 flex items-center justify-center flex-shrink-0 text-[var(--text)]">
+            <Folder size={22} />
+          </div>
+          <input
+            autoFocus
+            value={name}
+            maxLength={60}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && submit()}
+            placeholder="Nama project"
+            className="flex-1 min-w-0 h-14 rounded-2xl bg-transparent border-2 border-[var(--text)]/20 focus:border-[var(--text)] px-4 text-[17px] text-[var(--text)] outline-none transition-colors placeholder:text-[var(--text)]/40"
+          />
+        </div>
+
+        <label className="block mt-7 mb-2 text-[15px] text-[var(--text)]/60">Instruksi project (opsional)</label>
+        <textarea
+          value={instructions}
+          maxLength={2000}
+          onChange={(e) => setInstructions(e.target.value)}
+          placeholder="Tulis instruksi soal gaya, nada, dan peran yang kamu mau dari AI di semua chat dalam project ini."
+          className="w-full min-h-[190px] rounded-2xl bg-transparent border border-[var(--text)]/15 focus:border-[var(--text)]/40 px-4 py-3.5 text-[16px] leading-relaxed text-[var(--text)] outline-none resize-none transition-colors placeholder:text-[var(--text)]/40"
+        />
+      </div>
+    </div>
+  );
+};
+
+export const ProjectPage: React.FC<ProjectPageProps> = ({
+  projects, chatSessions, onCreateProject, onUpdateProject, onDeleteProject,
+  onOpenChat, onRemoveFromProject, onNewChatInProject, onBack,
+}) => {
+  const [screen, setScreen] = useState<Screen>({ name: 'list' });
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // chat per project (Private Chat tidak ikut, karena tidak disimpan ke server)
+  const chatsByProject = useMemo(() => {
+    const map: Record<string, ProjectChat[]> = {};
+    for (const s of chatSessions) {
+      const a: any = s;
+      if (!a.projectId || a.isTemporary) continue;
+      const msgs: any[] = a.messages || [];
+      if (!map[a.projectId]) map[a.projectId] = [];
+      map[a.projectId].push({
+        id: a.id,
+        title: sessionTitle(a),
+        lastRaw: msgs[msgs.length - 1]?.content,
+        date: typeof a.date === 'string' ? a.date : '',
+        count: msgs.length,
+      });
+    }
+    return map;
+  }, [chatSessions]);
+
+  // ─── FORM (baru / edit) ───
+  if (screen.name === 'form') {
+    const editing = screen.editId ? projects.find((p) => p.id === screen.editId) : undefined;
+    const editId = screen.editId;
+    return (
+      <ProjectForm
+        key={editId || 'new'}
+        heading={editing ? 'Edit Project' : 'Project Baru'}
+        submitLabel={editing ? 'Simpan' : 'Buat'}
+        initialName={editing?.name}
+        initialInstructions={editing?.instructions}
+        onClose={() => setScreen(editing ? { name: 'detail', id: editing.id } : { name: 'list' })}
+        onSubmit={(name, instructions) => {
+          if (editing) {
+            onUpdateProject(editing.id, { name, instructions });
+            setScreen({ name: 'detail', id: editing.id });
+          } else {
+            onCreateProject(name, instructions);
+            setScreen({ name: 'list' });
+          }
+        }}
+      />
+    );
+  }
+
+  // ─── DETAIL PROJECT ───
+  const detail = screen.name === 'detail' ? projects.find((p) => p.id === screen.id) : undefined;
+  if (screen.name === 'detail' && detail) {
+    const chats = chatsByProject[detail.id] || [];
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg)]">
+        <TopBar
+          left={<button onClick={() => { setConfirmDelete(false); setScreen({ name: 'list' }); }} aria-label="Kembali" className={IconBtn}><ArrowLeft size={24} strokeWidth={2.2} /></button>}
+          title={detail.name}
+          right={<button onClick={() => setScreen({ name: 'form', editId: detail.id })} aria-label="Edit project" className={IconBtn}><Pencil size={20} strokeWidth={2.2} /></button>}
+        />
+
+        <div className="flex-1 overflow-y-auto px-4 pb-10 pt-1 flex flex-col gap-3 min-h-0" style={{ scrollbarWidth: 'none' }}>
+          {detail.instructions && (
+            <div className="rounded-2xl bg-[var(--text)]/5 p-4">
+              <p className="text-[12px] font-semibold text-[var(--text)]/50 mb-1.5">Instruksi</p>
+              <p className="text-[14px] leading-relaxed text-[var(--text)]/80 whitespace-pre-wrap line-clamp-6">{detail.instructions}</p>
+            </div>
+          )}
+
+          <button
+            onClick={() => onNewChatInProject(detail.id)}
+            className="flex items-center justify-center gap-2 h-12 rounded-full bg-[var(--ac)] text-[var(--at)] text-[15px] font-bold transition-transform active:scale-[0.97]"
+          >
+            <SquarePen size={18} strokeWidth={2.2} /> Chat baru di project ini
+          </button>
+
+          <p className="text-[13px] font-semibold text-[var(--text)]/50 mt-2 px-1">Chat ({chats.length})</p>
+
+          {chats.length === 0 ? (
+            <div className="rounded-2xl bg-[var(--text)]/5 px-4 py-6 text-center text-[14px] leading-relaxed text-[var(--text)]/60">
+              Belum ada chat. Di sidebar, klik titik tiga pada riwayat chat, lalu pilih Move to Project.
+            </div>
+          ) : (
+            chats.map((c) => {
+              const preview = makePreview(c.lastRaw);
+              return (
+                <div key={c.id} className="rounded-2xl bg-[var(--text)]/5 p-4 flex flex-col gap-3">
+                  <button onClick={() => onOpenChat(c.id)} className="flex flex-col text-left active:opacity-70 transition-opacity">
+                    <p className="text-[15px] font-bold text-[var(--text)] truncate">{c.title}</p>
+                    {preview && <p className="text-[12.5px] text-[var(--text)]/60 truncate mt-0.5">{preview}</p>}
+                    <p className="text-[11px] text-[var(--text)]/40 mt-1">{c.count} pesan{c.date ? `, ${c.date}` : ''}</p>
+                  </button>
+                  <div className="flex gap-2 flex-wrap">
+                    <button onClick={() => onOpenChat(c.id)} className={ActionBtn}><MessageSquare size={15} /> Buka chat</button>
+                    <button onClick={() => onRemoveFromProject(c.id)} className={ActionBtn}><FolderMinus size={15} /> Keluarkan</button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+
+          {!confirmDelete ? (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="mt-4 flex items-center justify-center gap-2 h-12 rounded-full bg-[var(--text)]/5 text-red-500 text-[15px] font-semibold transition-transform active:scale-[0.97]"
+            >
+              <Trash2 size={17} /> Hapus project
+            </button>
+          ) : (
+            <div className="mt-4 rounded-2xl bg-[var(--text)]/5 p-4 flex flex-col gap-3">
+              <p className="text-[14px] leading-relaxed text-[var(--text)]/70">
+                Hapus project ini? Chat di dalamnya tetap ada di riwayat, hanya dikeluarkan dari project.
+              </p>
+              <div className="flex gap-2 justify-end">
+                <button onClick={() => setConfirmDelete(false)} className={ActionBtn}>Batal</button>
+                <button
+                  onClick={() => { onDeleteProject(detail.id); setConfirmDelete(false); setScreen({ name: 'list' }); }}
+                  className={cn(ActionBtn, "text-red-500")}
+                >
+                  Hapus
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ─── DAFTAR PROJECT ───
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg)]">
+      <TopBar
+        left={<button onClick={onBack} aria-label="Kembali" className={IconBtn}><ArrowLeft size={24} strokeWidth={2.2} /></button>}
+        title="Project"
+        right={<button onClick={() => setScreen({ name: 'form' })} aria-label="Project baru" className={IconBtn}><Plus size={26} strokeWidth={2.2} /></button>}
+      />
+
+      {projects.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center text-center px-8 gap-3 pb-24">
+          <div className="w-[70px] h-[70px] rounded-full bg-[var(--text)]/5 flex items-center justify-center text-[var(--text)]">
+            <Folder size={28} />
+          </div>
+          <p className="text-[17px] font-bold text-[var(--text)] mt-1">Mulai dengan membuat project baru</p>
+          <p className="text-[14.5px] text-[var(--text)]/60 leading-relaxed max-w-[300px]">
+            Project membantu kamu mengatur instruksi bersama untuk banyak percakapan.
+          </p>
+          <button
+            onClick={() => setScreen({ name: 'form' })}
+            className="mt-3 flex items-center gap-2 h-12 px-6 rounded-full bg-[var(--text)]/5 hover:bg-[var(--text)]/10 text-[16px] font-bold text-[var(--text)] transition-transform active:scale-95"
+          >
+            <Plus size={20} strokeWidth={2.2} /> Project baru
+          </button>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 pb-10 pt-1 min-h-0" style={{ scrollbarWidth: 'none' }}>
+          {/* 2 kolom, tiap project = kotak persegi. Kalau baru satu, tetap satu kotak (setengah lebar), bukan persegi panjang. */}
+          <div className="grid grid-cols-2 gap-3">
+            {projects.map((p) => {
+              const n = (chatsByProject[p.id] || []).length;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setScreen({ name: 'detail', id: p.id })}
+                  className="aspect-square min-w-0 rounded-3xl bg-[var(--text)]/5 hover:bg-[var(--text)]/10 p-4 flex flex-col justify-between text-left transition-[transform,background-color] active:scale-[0.96]"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-[var(--text)]/10 flex items-center justify-center flex-shrink-0 text-[var(--text)]">
+                    <Folder size={22} strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[16px] font-bold leading-snug text-[var(--text)] line-clamp-2 break-words">{p.name}</p>
+                    <p className="text-[12px] text-[var(--text)]/50 mt-1">{n} chat</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
