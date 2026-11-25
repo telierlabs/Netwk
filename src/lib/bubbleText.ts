@@ -1,0 +1,13 @@
+// Teks statis ChatBubble/GroupChatBubble/UserBubble/FlowSheet/SearchingIndicator/ChatChart/ZoomOverlay. Namespace: 'bubbleUi'.
+export const BUBBLE_NS = 'bubbleUi';
+
+const K = ["docAttached", "today", "yesterday", "you", "replying", "collapse", "readMore", "presentation", "resend", "edit", "copy", "copied", "flow", "thoughtFor", "close", "sec", "viewFlow", "tapFlow", "stCode", "stImage", "stDoc", "stThink", "stSearch", "stReadSrc", "stResult", "stWrite", "stDoneFiles", "stCodeDone", "stAnswerDone", "stCompose", "reading", "searching", "chart", "touchChart", "zNodes", "zYou", "zSynth", "zCamera", "zTelemetry", "zLatency", "zCompute", "zCanvas", "zNoFile", "zInviteHuman", "zAddAI", "fbCode", "fbImage", "fbDoc"];
+const mk = (a: string[]) => { const o: Record<string, string> = {}; K.forEach((k, i) => { o[k] = a[i]; }); return o; };
+
+export const BUBBLE_TEXT = {
+  id: mk(["Dokumen Terlampir", "Hari ini", "Kemarin", "Kamu", "Membalas", "Ciutkan", "Selengkapnya", "Presentasi", "Ulangi", "Edit", "Salin", "Tersalin", "Alur", "Berpikir selama {n} detik", "Tutup", "{n} dtk", "Lihat alur — {label}", "Ketuk untuk melihat alur", "Mengerjakan kode", "Mengamati gambar", "Membaca dokumen", "Memahami permintaan", "Mencari", "Membaca sumber", "Hasil", "Menulis {name}", "Selesai: {n} file siap dibuka", "Kode selesai", "Jawaban selesai", "Menyusun jawaban", "Membaca {domain}", "menelusuri informasinya", "Grafik", "Sentuh grafik untuk lihat nilainya", "{n} node aktif terenkripsi", "(ANDA)", "Menyintesis...", "Kamera aktif", "Telemetri sistem", "Latensi jaringan", "Beban komputasi AI", "Kanvas aktif", "Tidak ada file yang diproyeksikan.", "Undang Manusia", "Tambahkan AI", "menganalisis kodenya", "mengamati gambarnya", "membaca dokumennya"]),
+  en: mk(["Attached document", "Today", "Yesterday", "You", "Replying", "Collapse", "Read more", "Presentation", "Retry", "Edit", "Copy", "Copied", "Flow", "Thought for {n} seconds", "Close", "{n} sec", "View flow — {label}", "Tap to view the flow", "Working on code", "Examining image", "Reading document", "Understanding the request", "Searching", "Reading sources", "Result", "Writing {name}", "Done: {n} files ready to open", "Code done", "Answer done", "Composing the answer", "Reading {domain}", "looking into it", "Chart", "Touch the chart to see values", "{n} active nodes encrypted", "(YOU)", "Synthesizing...", "Camera active", "System telemetry", "Network latency", "AI compute load", "Active canvas", "No file projected.", "Invite a person", "Add AI", "analyzing the code", "examining the image", "reading the document"]),
+};
+
+export const fillB = (s: string, vars: Record<string, string | number>) =>
+  Object.keys(vars).reduce((acc, k) => acc.split(`{${k}}`).join(String(vars[k])), s);
